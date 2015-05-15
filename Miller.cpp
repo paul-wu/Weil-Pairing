@@ -404,6 +404,8 @@ POINT * randompoint(CURVE * c, lint p)
 		}
 	}
 	
+	if(rand()%2)y = ABS(-y,p);
+	
 	result->x = newfpoint(0,x);
 	result->y = newfpoint(0,y);
 	
@@ -451,16 +453,26 @@ FPOINT * evalueline(POINT * a, POINT * b, POINT * in, lint p, CURVE * c, FPOINT 
 	temp1 = newfpoint(0,0); temp2 = newfpoint(0,0);
 	
 	if(pequl(a,b)){
-		fadd(fnmulti(fpower(a->x,2,p,temp1),3,p,temp1),c->A,p,temp1);
-		fminus(in->x,a->x,p,temp2);
-		fmulti(temp1,temp2,p,result);
-		fmulti(fnmulti(a->y,2,p,temp1),fminus(in->y,a->y,p,temp2),p,temp1);
-		fminus(result,temp1,p,result);
+		/* 
+			targent line of y^2 = x^3 + Ax + B
+			so, F(x,y) = y^2 - x^3 -Ax -B we have 
+			
+				F_x = -3x^2 - A,	F_y = 2y
+			
+			from elmentary calculas we have the targent line is
+			
+				F_x(x - x_1) + F_y(y - y_1) = 0	
+		*/
+		fadd(fnmulti(fpower(a->x,2,p,temp1),3,p,temp1),c->A,p,temp1); //temp1 = 3*x1*x1 + A
+		fminus(in->x,a->x,p,temp2); // temp2 = x3 - x1
+		fmulti(temp1,temp2,p,result); // result = temp1*temp2
+		fmulti(fnmulti(a->y,2,p,temp1),fminus(in->y,a->y,p,temp2),p,temp1); // temp1 = 2*y1*(y3-y1)
+		fminus(result,temp1,p,result); // result = result - temp1 = (3*x1*x1 + A)(x3 - x1) - 2*y1(y3 - y1) 
 		
 	}else{
-		fmulti(fminus(in->x,b->x,p,temp1),fminus(a->y,b->y,p,temp2),p,result);
-		fmulti(fminus(a->x,b->x,p,temp1),fminus(in->y,b->y,p,temp2),p,temp1);
-		fminus(result,temp1,p,result);
+		fmulti(fminus(in->x,b->x,p,temp1),fminus(a->y,b->y,p,temp2),p,result); // result = (x3 - x2)*(y1 - y2)
+		fmulti(fminus(a->x,b->x,p,temp1),fminus(in->y,b->y,p,temp2),p,temp1); // temp1 = (x1 - x2)*(y3 - y2)
+		fminus(result,temp1,p,result); // result = result - temp1 = (x3 - x2)*(y1 - y2) - (x1 - x2)*(y3 - y2)
 	}
 	
 	free(temp1); free(temp2);
@@ -473,22 +485,23 @@ bool evaluelinedivi(POINT * a, POINT * b, POINT * in, CURVE * c, lint p, FPOINT 
 	FPOINT * temp = newfpoint(0,0);
 	POINT * tp = newpoint(0,0,0,0), * tp1 = newpoint(0,0,0,0);
 	
-	assign(result,ONE);
-	add(a,b,c,p,tp);
+	assign(result,ONE); // result = 1
+	add(a,b,c,p,tp); // point tp = a + b
 	
-	fmulti(result,evalueline(a,b,in,p,c,temp),p,result);
-	if(equl(result,ZERO)){
+	fmulti(result,evalueline(a,b,in,p,c,temp),p,result);// result = l(in), where l is the line through a and b
+	
+	if(equl(result,ZERO)){ // if the result = 0, we can conclude that in is in line l
 		free(temp); freepoint(tp); freepoint(tp1);
 		return false;
 	}
 	
-	evalueline(tp,pneg(tp,p,tp1),in,p,c,temp);
+	evalueline(tp,pneg(tp,p,tp1),in,p,c,temp); // temp = l'(in), where l' is the line through a + b and -(a+b)
 	if(equl(temp,ZERO)){
 		free(temp); freepoint(tp); freepoint(tp1);
 		return false;
 	}
 	
-	fmulti(inverse(temp,p,temp),result,p,result);
+	fmulti(inverse(temp,p,temp),result,p,result); // result = result / temp = l(in) / l'(in)
 	free(temp); freepoint(tp); freepoint(tp1);
 	
 	return true;	
@@ -499,8 +512,8 @@ bool miller(POINT * a, POINT * b, CURVE * c, lint m, lint p, FPOINT * f)
 	FPOINT * temp = newfpoint(0,0);
 	POINT * t = newpoint(0,0,0,0);
 	
-	assign(f,ONE);
-	passign(t,a);
+	assign(f,ONE); //f = 1
+	passign(t,a); // t = a
 	
 	lint i = 0, array[(int)logb((double)m)+1];
 	
@@ -512,21 +525,21 @@ bool miller(POINT * a, POINT * b, CURVE * c, lint m, lint p, FPOINT * f)
 		i++;
 	}
 	
-	for(lint j = i - 1;j > 1; j--){
-		fmulti(f,f,p,f); 
-		if(!evaluelinedivi(t,t,b,c,p,temp)){
+	for(lint j = i - 1;j >= 1; j--){
+		fmulti(f,f,p,f); // f = f*f
+		if(!evaluelinedivi(t,t,b,c,p,temp)){ // temp = l(b) / l'(b) where l is the targent line of t at curve c, and l' is the line through 2t and -2t
 			free(temp); freepoint(t);
 			return false; 
 		}
-		fmulti(f,temp,p,f);
-		add(t,t,c,p,t); // double point t
-		if(array[i] == 1){
-			if(!evaluelinedivi(t,a,b,c,p,temp)){
+		fmulti(f,temp,p,f); // f = f * l(b) / l'(b)
+		add(t,t,c,p,t); // t = 2t
+		if(array[j] == 1){
+			if(!evaluelinedivi(t,a,b,c,p,temp)){ // l is the line through t and a, l' throug t+a and -(t+a)
 				free(temp); freepoint(t);
 				return false; 
 			}
-			fmulti(f,temp,p,f);
-			add(t,a,c,p,t);
+			fmulti(f,temp,p,f); // f = temp * f
+			add(t,a,c,p,t); // t = a + t
 		}
 	}
 	
@@ -575,29 +588,54 @@ bool weilpairing(POINT * a, POINT * b, CURVE * c, lint p, FPOINT * result)
 	
 	while(true){
 		freepoint(S);
-		S = randompoint(c,p);
+		S = randompoint(c,p); // random point on c
 		
-		if(!miller(a,add(S,b,c,p,temp),c,n,p,t1))continue;
-		if(!miller(a,S,c,n,p,t2))continue;
-		if(!miller(b,minus(a,S,c,p,temp),c,n,p,t3))continue;
-		if(!miller(b,pneg(S,p,temp),c,m,p,t4))continue;
 		
-		assign(result,t1); fmulti(result,t4,p,result);
-		fmulti(result,inverse(t2,p,t3),p,result);
-		fmulti(result,inverse(t3,p,result),p,result);
 		
-		if(!evaluelinedivi(minus(a,S,c,p,temp),pneg(S,p,temp1),add(S,b,c,p,temp2),c,p,t1))continue;
-		if(!evaluelinedivi(minus(a,S,c,p,temp),pneg(S,p,temp1),S,c,p,t2))continue;
-		if(!evaluelinedivi(add(S,b,c,p,temp),S,minus(a,S,c,p,temp2),c,p,t3))continue;
-		if(!evaluelinedivi(add(S,b,c,p,temp),S,pneg(S,p,temp2),c,p,t4))continue;
+		//phi(S,p,S);
+		
+		showpoint(S);
+		
+		if(!miller(a,add(S,b,c,p,temp),c,n,p,t1))continue; // t1 = f_a(S+b)
+		if(!miller(a,S,c,n,p,t2))continue; // t2 = f_a(S)
+		if(!miller(b,minus(a,S,c,p,temp),c,n,p,t3))continue; // t3 = f_b(a-S)
+		if(!miller(b,pneg(S,p,temp),c,m,p,t4))continue; // t4 = f_b(-S)
+		
+		
+		
+		showpoint(S); 
+		
+		assign(result,t1); fmulti(result,t4,p,result); // result = f_a(S+b) * f_b(-S)
+		fmulti(result,inverse(t2,p,t1),p,result); // result = f_a(S+b) * f_b(-S) / f_a(S)
+		fmulti(result,inverse(t3,p,t1),p,result); // result = f_a(S+b) * f_b(-S) / f_a(S) * f_b(a-S)
+		
+		
+		// l through a and -S, l' through a - 2S and 2S - a, evaluation at S + b
+		if(!evaluelinedivi(a,pneg(S,p,temp1),add(S,b,c,p,temp2),c,p,t1))continue;
+		
+		// l through a and -S, l' through a - 2S and 2S - a, evaluation at S 
+		if(!evaluelinedivi(a,pneg(S,p,temp1),S,c,p,t2))continue;
+		
+		// l through b and S, l' through a + 2S and -2S - a, evaluation at a - S 
+		if(!evaluelinedivi(b,S,minus(a,S,c,p,temp2),c,p,t3))continue;
+		
+		// l through b and S, l' through a + 2S and -2S - a, evaluation at -S 
+		if(!evaluelinedivi(b,S,pneg(S,p,temp2),c,p,t4))continue;
 
-		fpower(t1,n,p,t1); fpower(t2,n,p,t2); fpower(t3,n,p,t3); fpower(t4,n,p,t4); 
-		inverse(result,p,result);
+		fpower(t1,n,p,t1); fpower(t2,n,p,t2); fpower(t3,n,p,t3); fpower(t4,n,p,t4); // t1 = t1^n ... t4 = t4^n 
 		
-		assign(result,t1); fmulti(result,t4,p,result);
-		fmulti(result,inverse(t2,p,t3),p,result);
-		fmulti(result,inverse(t3,p,result),p,result);		
+		fmulti(result,t1,p,result);fmulti(result,t4,p,result); // result = h_b(-S) * h_a(S+b) * f_a(S) * f_b(a-S) / f_a(S+b) * f_b(-S)
+		fmulti(result,inverse(t2,p,t1),p,result); 
+		fmulti(result,inverse(t3,p,t1),p,result);		
 		
+		inverse(result,p,result); 
+		
+		// result = h_b(-S) * h_a(S+b) * f_a(S) * f_b(a-S) / f_a(S+b) * f_b(-S) * h_a(S) * h_b(a-S)
+		// let f_a' = h_a/f_a , f_b' = h_b/f_b
+ 		//  
+		// since div(h_a) = (a) + (-S) + (S - a) - 3(O) - (S -a) - (a -S) + 2(O) = (a) + (-S) - (a - S) - (O)
+		// div(h_b) = (b) + (S) - (b+S) - (O)
+		 
 		break;
 	}
 	
@@ -619,7 +657,7 @@ void init()
 int main()
 {
 	init();
-	lint p=46523;
+	lint p=11;
 	FPOINT * test = newfpoint(0,14);
 	FPOINT * test1;
 	
@@ -629,26 +667,28 @@ int main()
 	
 	//add(P,P,c,p,P);
 	
-	P1 = newpoint(0,654,0,21925);
-	P2 = newpoint(0,12416,0,39871);
+	P1 = newpoint(0,0,0,1);
+	P2 = newpoint(0,9,0,2);
 	
 	showelement(primitroot(p));
 	
 	//phi(P2,p,P2);
-	//phi(P1,p,P1);
+	//phi(P2,p,P1);
 	
 	
 	showpoint(P1);
 	showpoint(P2);
 	
-	ppower(P1,2,c,p,P2);
+	//ppower(P1,2,c,p,P2);
 	
-	if(weilpairing(P1,P2,c,p,test))showelement(test);
+	if(weilpairing(P1,P1,c,p,test))showelement(test);
 	else
 		printf("fail!\n");
 	
-	printf("%d\n",testpoint(P1,c,p));
-	printf("%d\n",testpoint(P2,c,p));
+	fpower(test,6,p,test);showelement(test);
+	
+	printf("%d\n",findorder(P1,c,p));
+	printf("%d\n",findorder(P2,c,p));
 	
 	//pneg(P,p,P);
 	
