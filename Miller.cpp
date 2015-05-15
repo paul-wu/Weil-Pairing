@@ -1,7 +1,6 @@
 #include"elliptic.h"
 
-
-FPOINT * newfpoint(int x, int y)
+FPOINT * newfpoint(lint x, lint y)
 {
 	FPOINT * result = (FPOINT *)malloc(sizeof(fpoint));
 	result->x = x;
@@ -9,7 +8,7 @@ FPOINT * newfpoint(int x, int y)
 	return result;
 }
 
-POINT * newpoint(int a, int b, int c, int d)
+POINT * newpoint(lint a, lint b, lint c, lint d)
 {
 	POINT * result = (POINT *)malloc(sizeof(point));
 	result->x = newfpoint(a,b);
@@ -17,7 +16,7 @@ POINT * newpoint(int a, int b, int c, int d)
 	return result;
 }
 
-CURVE * newcurve(int A, int B)
+CURVE * newcurve(lint A, lint B)
 {
 	CURVE * result = (CURVE *)malloc(sizeof(curve));
 	result->A = newfpoint(0,A);
@@ -33,30 +32,30 @@ void freepoint(POINT * a)
 }
 
 //absolute value modulo p
-int ABS(int a, int p)
+lint ABS(lint a, lint p)
 {
 	return (a>=0)?a%p:(p-(-a)%p)%p;
 }
 
 //extended euclid algorithm
-int gcdEx(int a, int b, int *x, int *y) 
+lint gcdEx(lint a, lint b, lint *x, lint *y) 
 {
     if(b==0){
         *x = 1,*y = 0;
         return a;
     }
     else{
-        int r = gcdEx(b, a%b, x, y);
-        int t = *x;
+        lint r = gcdEx(b, a%b, x, y);
+        lint t = *x;
         *x = *y;
         *y = t - a/b * *y;
         return r;
     }
 }
 
-int powermod(int a, int n, int p)
+lint powermod(lint a, lint n, lint p)
 {
-	int result, DB;
+	lint result, DB;
 	
 	result = 1;
 	DB = a;
@@ -71,29 +70,29 @@ int powermod(int a, int n, int p)
 }
 
 //modulo inverse
-int inver(int a, int p)
+lint inver(lint a, lint p)
 {
-	int s,t;
+	lint s,t;
 	if(gcdEx(a,p,&s,&t)!=1)return 0;
 	return ABS(s,p);
 }
 
-int randomnonq(int p)
+lint randomnonq(lint p)
 {
-	int i, k = (p-1)>>1;
+	lint i, k = (p-1)>>1;
 	for(i = 1;i < p;i++){
 		if(powermod(i,k,p) != 1)break;
 	}
 	return i;
 }
 
-int modsquareroot(int a, int p)
+lint modsquareroot(lint a, lint p)
 {
 	if(powermod(a,(p-1)>>1,p) != 1)return -1;
 	
-	int r = (p-1)>>1;
-	int b = randomnonq(p);
-	int x = r, y = 0;
+	lint r = (p-1)>>1;
+	lint b = randomnonq(p);
+	lint x = r, y = 0;
 
 	while(!(x&1)){
 		x >>= 1; y >>= 1;
@@ -103,17 +102,21 @@ int modsquareroot(int a, int p)
 	return ABS(powermod(a,(x+1)>>1,p)*powermod(b,y>>1,p),p);
 }
 
-bool millerrabin(int n, int r)
+bool millerrabin(lint n, lint r)
 {
-	int s = 0, t = n - 1;
+	if(n <= 1)return false;
+	
+	lint s = 0, t = n - 1;
 	
 	while(!(t&1)){
 		s++; t >>= 1;
 	}
 	while(r--){
-		int b = rand()%(n-1) + 2;
-		int r0 = powermod(b,t,n);
-		int s0 = s - 1;
+		lint b = rand()%(n-1) + 2;
+		lint r0 = powermod(b,t,n);
+		lint s0 = s - 1;
+		
+		lint c = powermod(b,n-1,n); 
 		
 		if(r0 == 1 || r0 == n - 1)continue;
 		if(s0 < 1)return false;
@@ -127,16 +130,25 @@ bool millerrabin(int n, int r)
 	return true;
 } 
 
-int largerandom(int n)
+lint largerandom(lint n)
 {
-	int a = rand()%10000, b = rand()%10000;
+	lint a = rand()%10000, b = rand()%10000;
 	return (a+b*10000)%n;
 }
 
-int randomgoodprime(int n)
+lint randomgoodprime(lint n)
 {
-	int p = 4;
+	lint p = 4;
 	while(!millerrabin(p,10))p = 12*largerandom(n)+11;
+	return p;
+}
+
+lint randonsafeprime(lint n)
+{
+	lint p;
+	while(p = randomgoodprime(n)){
+		if(millerrabin((p+1)/12,2))break;
+	}
 	return p;
 }
 
@@ -147,7 +159,7 @@ bool equl(FPOINT * a, FPOINT * b)
 	return false;
 }
 
-bool equln(FPOINT * a, FPOINT * b, int p)
+bool equln(FPOINT * a, FPOINT * b, lint p)
 {
 	if(a->x == ABS(-b->x,p)&&a->y == ABS(-b->y,p))return true;
 	return false;
@@ -160,10 +172,10 @@ bool pequl(POINT * a, POINT * b)
 
 void showelement(FPOINT * p)
 {
-	printf("(%d,%d)\n",p->x,p->y);
+	printf("(%lld,%lld)\n",p->x,p->y);
 }
 
-FPOINT * fneg(FPOINT * a, int p, FPOINT * result)
+FPOINT * fneg(FPOINT * a, lint p, FPOINT * result)
 {
 	result->x = ABS(-a->x,p);
 	result->y = ABS(-a->y,p);
@@ -172,10 +184,10 @@ FPOINT * fneg(FPOINT * a, int p, FPOINT * result)
 }
 
 //field elements addition
-FPOINT * fadd(FPOINT * a, FPOINT * b, int p, FPOINT * result)
+FPOINT * fadd(FPOINT * a, FPOINT * b, lint p, FPOINT * result)
 {
-	int x = ABS(a->x + b->x,p);
-	int y = ABS(a->y + b->y,p);
+	lint x = ABS(a->x + b->x,p);
+	lint y = ABS(a->y + b->y,p);
 	
 	result->x = x;
 	result->y = y;
@@ -184,10 +196,10 @@ FPOINT * fadd(FPOINT * a, FPOINT * b, int p, FPOINT * result)
 }
 
 //field elements minus
-FPOINT * fminus(FPOINT * a, FPOINT * b, int p, FPOINT * result)
+FPOINT * fminus(FPOINT * a, FPOINT * b, lint p, FPOINT * result)
 {
-	int x = ABS(a->x - b->x,p);
-	int y = ABS(a->y - b->y,p);
+	lint x = ABS(a->x - b->x,p);
+	lint y = ABS(a->y - b->y,p);
 	
 	result->x = x;
 	result->y = y;
@@ -196,10 +208,10 @@ FPOINT * fminus(FPOINT * a, FPOINT * b, int p, FPOINT * result)
 }
 
 //field elements multiplication
-FPOINT * fmulti(FPOINT * a, FPOINT * b, int p, FPOINT * result)
+FPOINT * fmulti(FPOINT * a, FPOINT * b, lint p, FPOINT * result)
 {
-	int x = ABS(a->y*b->x + a->x*b->y,p);
- 	int y = ABS(a->y*b->y - a->x*b->x,p);
+	lint x = ABS(a->y*b->x + a->x*b->y,p);
+ 	lint y = ABS(a->y*b->y - a->x*b->x,p);
  	
  	result->x = x;
  	result->y = y;
@@ -217,7 +229,7 @@ FPOINT * assign(FPOINT * a, FPOINT * b)
 
 
 //field element expontinal
-FPOINT * fpower(FPOINT * a, int n, int p, FPOINT * result)
+FPOINT * fpower(FPOINT * a, lint n, lint p, FPOINT * result)
 {
 	n = n%(p*p - 1);
 	
@@ -238,7 +250,7 @@ FPOINT * fpower(FPOINT * a, int n, int p, FPOINT * result)
 }
 
 //field element inverse
-FPOINT * inverse(FPOINT * a, int p, FPOINT * result)
+FPOINT * inverse(FPOINT * a, lint p, FPOINT * result)
 {	
 	if(a->x == 0){
 		result->x = 0;
@@ -246,8 +258,8 @@ FPOINT * inverse(FPOINT * a, int p, FPOINT * result)
 		return result;
 	}
 	
-	int x = inver(ABS(-a->y*a->y*inver(a->x,p)-a->x,p),p);
-	int y = ABS(-a->y*inver(a->x,p)*x,p);
+	lint x = inver(ABS(-a->y*a->y*inver(a->x,p)-a->x,p),p);
+	lint y = ABS(-a->y*inver(a->x,p)*x,p);
 	
 	result->x = x;
 	result->y = y;
@@ -256,7 +268,7 @@ FPOINT * inverse(FPOINT * a, int p, FPOINT * result)
 }
 
 //multiply by number
-FPOINT * fnmulti(FPOINT * a, int b, int p, FPOINT * result)
+FPOINT * fnmulti(FPOINT * a, lint b, lint p, FPOINT * result)
 {
 	result->x = ABS(a->x*b,p);
 	result->y = ABS(a->y*b,p);
@@ -270,7 +282,7 @@ POINT * passign(POINT * a, POINT * b)
 	return a;
 }
 
-bool testpoint(POINT * p, CURVE * c, int p1)
+bool testpoint(POINT * p, CURVE * c, lint p1)
 {
 	if(pequl(p,O))return true;
 	
@@ -288,10 +300,10 @@ bool testpoint(POINT * p, CURVE * c, int p1)
 
 void showpoint(POINT * p)
 {
-	printf("\n[(%d,%d),(%d,%d)]\n",p->x->x,p->x->y,p->y->x,p->y->y);
+	printf("\n[(%lld,%lld),(%lld,%lld)]\n",p->x->x,p->x->y,p->y->x,p->y->y);
 }
 
-POINT * pneg(POINT * a, int p, POINT * result)
+POINT * pneg(POINT * a, lint p, POINT * result)
 {
 	if(pequl(a,O)){
 		passign(result,O);
@@ -303,8 +315,8 @@ POINT * pneg(POINT * a, int p, POINT * result)
 	return result;
 }
 
-//curve point additon
-POINT * add(POINT * p1, POINT * p2, CURVE * c, int p, POINT * result)
+//curve polint additon
+POINT * add(POINT * p1, POINT * p2, CURVE * c, lint p, POINT * result)
 {	
 	if(pequl(p1,O))return passign(result,p2);
 	
@@ -341,7 +353,7 @@ POINT * add(POINT * p1, POINT * p2, CURVE * c, int p, POINT * result)
 	return result;
 }
 
-POINT * minus(POINT * p1, POINT * p2, CURVE * c, int p, POINT * result)
+POINT * minus(POINT * p1, POINT * p2, CURVE * c, lint p, POINT * result)
 {
 	POINT * temp = newpoint(0,0,0,0);
 	add(pneg(p2,p,temp),p1,c,p,result);
@@ -352,7 +364,7 @@ POINT * minus(POINT * p1, POINT * p2, CURVE * c, int p, POINT * result)
 }
 
 //power of points addition
-POINT * ppower(POINT * a, int n, CURVE * c, int p, POINT * result)
+POINT * ppower(POINT * a, lint n, CURVE * c, lint p, POINT * result)
 {
 	POINT * DB;
 
@@ -372,15 +384,15 @@ POINT * ppower(POINT * a, int n, CURVE * c, int p, POINT * result)
 	return result;
 }
 
-POINT * randompoint(CURVE * c, int p)
+POINT * randompoint(CURVE * c, lint p)
 {	
 	POINT * result = newpoint(0,0,0,0);
 	
-	int x, y;
+	lint x, y;
 	
 	if((p-1)%3 && equl(c->A,ZERO)){
 		y = largerandom(p);
-		int r = inver(3,p-1);
+		lint r = inver(3,p-1);
 		
 		x = powermod(y*y-1, r, p);
 	}else{
@@ -398,9 +410,9 @@ POINT * randompoint(CURVE * c, int p)
 	return result;
 }
 
-FPOINT * primitroot(int p)
+FPOINT * primitroot(lint p)
 {
-	int x, y;
+	lint x, y;
 	
 	y = inver(2,p);
 	
@@ -414,15 +426,25 @@ FPOINT * primitroot(int p)
 	return newfpoint(x,ABS(-y,p)); 
 }
 
-POINT * phi(POINT * a, int p, POINT * result)
+POINT * phi(POINT * a, lint p, POINT * result)
 {	
-	fmulti(a->x,primitroot(p),p,result->x);
+	if(pequl(a,O)){
+		passign(result,a);
+		return result;
+	}
+	
+	FPOINT * temp = primitroot(p);
+	
+	
+	fmulti(a->x,temp,p,result->x);
 	assign(result->y, a->y);
+	
+	free(temp);
 	
 	return result;
 }
 
-FPOINT * evalueline(POINT * a, POINT * b, POINT * in, int p, CURVE * c, FPOINT * result)
+FPOINT * evalueline(POINT * a, POINT * b, POINT * in, lint p, CURVE * c, FPOINT * result)
 {
 	FPOINT * temp1, *temp2;
 	
@@ -446,15 +468,41 @@ FPOINT * evalueline(POINT * a, POINT * b, POINT * in, int p, CURVE * c, FPOINT *
 	return result;
 }
 
-bool miller(POINT * a, POINT * b, CURVE * c, int m, int p, FPOINT * f)
+bool evaluelinedivi(POINT * a, POINT * b, POINT * in, CURVE * c, lint p, FPOINT * result)
 {
 	FPOINT * temp = newfpoint(0,0);
-	POINT * t = newpoint(0,0,0,0), * tp = newpoint(0,0,0,0);
+	POINT * tp = newpoint(0,0,0,0), * tp1 = newpoint(0,0,0,0);
+	
+	assign(result,ONE);
+	add(a,b,c,p,tp);
+	
+	fmulti(result,evalueline(a,b,in,p,c,temp),p,result);
+	if(equl(result,ZERO)){
+		free(temp); freepoint(tp); freepoint(tp1);
+		return false;
+	}
+	
+	evalueline(tp,pneg(tp,p,tp1),in,p,c,temp);
+	if(equl(temp,ZERO)){
+		free(temp); freepoint(tp); freepoint(tp1);
+		return false;
+	}
+	
+	fmulti(inverse(temp,p,temp),result,p,result);
+	free(temp); freepoint(tp); freepoint(tp1);
+	
+	return true;	
+} 
+
+bool miller(POINT * a, POINT * b, CURVE * c, lint m, lint p, FPOINT * f)
+{
+	FPOINT * temp = newfpoint(0,0);
+	POINT * t = newpoint(0,0,0,0);
 	
 	assign(f,ONE);
 	passign(t,a);
 	
-	int i = 0, array[(int)logb((double)m)+1];
+	lint i = 0, array[(int)logb((double)m)+1];
 	
 	while(m){
 		if(m&1)array[i] = 1;
@@ -464,22 +512,99 @@ bool miller(POINT * a, POINT * b, CURVE * c, int m, int p, FPOINT * f)
 		i++;
 	}
 	
-	for(int j = i - 1;j > 0; j--){
-		fmulti(f,f,p,f); fmulti(f,evalueline(t,t,b,p,c,temp),p,f);
-		if(equl(f,ZERO))return false;
-		add(t,t,c,p,t);
-		evalueline(t,pneg(t,p,tp),b,p,c,temp);
-		if(equl(temp,ZERO))return false;
-		fmulti(inverse(temp,p,temp),f,p,f);
+	for(lint j = i - 1;j > 1; j--){
+		fmulti(f,f,p,f); 
+		if(!evaluelinedivi(t,t,b,c,p,temp)){
+			free(temp); freepoint(t);
+			return false; 
+		}
+		fmulti(f,temp,p,f);
+		add(t,t,c,p,t); // double point t
 		if(array[i] == 1){
-			fmulti(f,evalueline(t,a,b,p,c,temp),p,f);
-			if(equl(f,ZERO))return false;
+			if(!evaluelinedivi(t,a,b,c,p,temp)){
+				free(temp); freepoint(t);
+				return false; 
+			}
+			fmulti(f,temp,p,f);
 			add(t,a,c,p,t);
-			evalueline(t,pneg(t,p,tp),b,p,c,temp);
-			if(equl(temp,ZERO))return false;
-			fmulti(inverse(temp,p,temp),f,p,f);	
 		}
 	}
+	
+	free(temp); freepoint(t);
+	
+	return true;
+}
+
+//the following function works only for supersingular elliptic curve
+lint findorder(POINT * po, CURVE * c, lint p)
+{
+	POINT * t = newpoint(0,0,0,0);
+	lint m = (p+1)/12;
+	lint list[6] = {1,2,3,4,6,12};
+	
+	for(int i = 0;i < 12;i++){
+		passign(t, po);
+		if(i<6 && pequl(ppower(t,list[i],c,p,t),O)){
+			freepoint(t);
+			return list[i];
+		}else if(pequl(ppower(t,m*list[i%6],c,p,t),O)){
+			freepoint(t);
+			return m*list[i%6];
+		}
+	}
+	
+	freepoint(t);
+	
+	return p+1;
+}
+
+bool weilpairing(POINT * a, POINT * b, CURVE * c, lint p, FPOINT * result)
+{
+	lint m = findorder(a,c,p);
+	lint n = findorder(b,c,p);
+	
+	FPOINT * t1, * t2, * t3, *t4;
+	t1 = newfpoint(0,0); t2 = newfpoint(0,0); t3 = newfpoint(0,0); t4 = newfpoint(0,0);
+	
+	
+	if(n%m == 0)m = n;
+	else if(m%n == 0)n = m;
+	else
+ 		return false;
+	POINT * S = newpoint(0,0,0,0), *temp = newpoint(0,0,0,0), *temp1 = newpoint(0,0,0,0), *temp2 = newpoint(0,0,0,0);
+	
+	while(true){
+		freepoint(S);
+		S = randompoint(c,p);
+		
+		if(!miller(a,add(S,b,c,p,temp),c,n,p,t1))continue;
+		if(!miller(a,S,c,n,p,t2))continue;
+		if(!miller(b,minus(a,S,c,p,temp),c,n,p,t3))continue;
+		if(!miller(b,pneg(S,p,temp),c,m,p,t4))continue;
+		
+		assign(result,t1); fmulti(result,t4,p,result);
+		fmulti(result,inverse(t2,p,t3),p,result);
+		fmulti(result,inverse(t3,p,result),p,result);
+		
+		if(!evaluelinedivi(minus(a,S,c,p,temp),pneg(S,p,temp1),add(S,b,c,p,temp2),c,p,t1))continue;
+		if(!evaluelinedivi(minus(a,S,c,p,temp),pneg(S,p,temp1),S,c,p,t2))continue;
+		if(!evaluelinedivi(add(S,b,c,p,temp),S,minus(a,S,c,p,temp2),c,p,t3))continue;
+		if(!evaluelinedivi(add(S,b,c,p,temp),S,pneg(S,p,temp2),c,p,t4))continue;
+
+		fpower(t1,n,p,t1); fpower(t2,n,p,t2); fpower(t3,n,p,t3); fpower(t4,n,p,t4); 
+		inverse(result,p,result);
+		
+		assign(result,t1); fmulti(result,t4,p,result);
+		fmulti(result,inverse(t2,p,t3),p,result);
+		fmulti(result,inverse(t3,p,result),p,result);		
+		
+		break;
+	}
+	
+	free(t1); free(t2); free(t3); free(t4); 
+	
+	freepoint(S); freepoint(temp); freepoint(temp1); freepoint(temp2);
+	
 	return true;
 }
 
@@ -494,7 +619,7 @@ void init()
 int main()
 {
 	init();
-	int p=23;
+	lint p=46523;
 	FPOINT * test = newfpoint(0,14);
 	FPOINT * test1;
 	
@@ -504,50 +629,30 @@ int main()
 	
 	//add(P,P,c,p,P);
 	
-	P1 = randompoint(c,p);//newpoint(0,2,0,7);
-	P2 = randompoint(c,p);//newpoint(0,16,0,125);
+	P1 = newpoint(0,654,0,21925);
+	P2 = newpoint(0,12416,0,39871);
 	
-	miller(P1,P2,c,10,p,test);
+	showelement(primitroot(p));
 	
-	showelement(test);
+	//phi(P2,p,P2);
+	//phi(P1,p,P1);
 	
-	//passign(P2,P1);
 	
 	showpoint(P1);
 	showpoint(P2);
 	
-	ppower(P1,9,c,p,temp);
+	ppower(P1,2,c,p,P2);
 	
-	showpoint(temp);
+	if(weilpairing(P1,P2,c,p,test))showelement(test);
+	else
+		printf("fail!\n");
 	
-	phi(temp,p,temp);
+	printf("%d\n",testpoint(P1,c,p));
+	printf("%d\n",testpoint(P2,c,p));
 	
-	showpoint(temp);
-	//minus(P,P,c,p,P);
-
 	//pneg(P,p,P);
 	
 	//passign(P,O);
-	
-	printf("%d\n",testpoint(temp,c,p));
-	
-	//int a = 4;
-	
-	
-	//showelement(inverse(test,p,test1));
-	
-	//test1 = primitroot(p);
-	
-	//showelement(test1);
-	
-	//fpower(test1,3,p,test1);
-	
-	//showelement(test1);
-	
-	//printf("%d\n",inver(14,p));
-	//printf("%d\n", modsquareroot(a,p));
-	
-	printf("%d\n",millerrabin(10,10));
 	
 	return 0;
 }
