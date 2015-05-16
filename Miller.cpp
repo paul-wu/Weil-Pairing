@@ -448,6 +448,13 @@ POINT * phi(POINT * a, lint p, POINT * result)
 
 FPOINT * evalueline(POINT * a, POINT * b, POINT * in, lint p, CURVE * c, FPOINT * result)
 {
+	if(pequl(a,O)&&pequl(b,O)){
+		assign(result,ONE);
+		return result;
+	}
+	if(pequl(a,O))pneg(b,p,a);
+	if(pequl(b,O))pneg(a,p,b);
+	
 	FPOINT * temp1, *temp2;
 	
 	temp1 = newfpoint(0,0); temp2 = newfpoint(0,0);
@@ -480,34 +487,44 @@ FPOINT * evalueline(POINT * a, POINT * b, POINT * in, lint p, CURVE * c, FPOINT 
 	return result;
 }
 
-bool evaluelinedivi(POINT * a, POINT * b, POINT * in, CURVE * c, lint p, FPOINT * result)
+char * pointasstring(POINT * p)
 {
+	char * result = (char *)malloc(sizeof(50));
+	sprintf(result,"[(%lld,%lld),(%lld,%lld)]",p->x->x,p->x->y,p->y->x,p->y->y);
+	return result;
+}
+
+bool evaluelinedivi(POINT * a, POINT * b, POINT * in, CURVE * c, lint p, FPOINT * result)
+{	
 	FPOINT * temp = newfpoint(0,0);
 	POINT * tp = newpoint(0,0,0,0), * tp1 = newpoint(0,0,0,0);
+	 
+	if(pequl(a,O)&&pequl(b,O)){
+		assign(result,ONE);
+		return false;
+	}
+	if(pequl(a,O))pneg(b,p,a);
+	if(pequl(b,O))pneg(a,p,b);
+	 
+	add(a,b,c,p,tp);
 	
-	assign(result,ONE); // result = 1
-	add(a,b,c,p,tp); // point tp = a + b
-	
-	fmulti(result,evalueline(a,b,in,p,c,temp),p,result);// result = l(in), where l is the line through a and b
-	
-	if(equl(result,ZERO)){ // if the result = 0, we can conclude that in is in line l
-		free(temp); freepoint(tp); freepoint(tp1);
+	if(equl(tp->x,in->x) || pequl(a,in) || pequl(b,in) || pequl(in,O)){
+		assign(result,ONE);
 		return false;
 	}
 	
-	evalueline(tp,pneg(tp,p,tp1),in,p,c,temp); // temp = l'(in), where l' is the line through a + b and -(a+b)
-	if(equl(temp,ZERO)){
-		free(temp); freepoint(tp); freepoint(tp1);
-		return false;
+	if(pequl(tp,O)){
+		fminus(in->x,a->x,p,result); 
+	}else{
+		evalueline(a,b,in,p,c,result);
+		inverse(fminus(in->x, tp->x, p, temp),p,temp);
+		fmulti(result,temp,p,result);
 	}
-	
-	fmulti(inverse(temp,p,temp),result,p,result); // result = result / temp = l(in) / l'(in)
-	free(temp); freepoint(tp); freepoint(tp1);
 	
 	return true;	
 } 
 
-bool miller(POINT * a, POINT * b, CURVE * c, lint m, lint p, FPOINT * f)
+bool miller(POINT * a, POINT * b, CURVE * c, lint p, lint m, FPOINT * f)
 {
 	FPOINT * temp = newfpoint(0,0);
 	POINT * t = newpoint(0,0,0,0);
@@ -525,7 +542,7 @@ bool miller(POINT * a, POINT * b, CURVE * c, lint m, lint p, FPOINT * f)
 		i++;
 	}
 	
-	for(lint j = i - 1;j >= 1; j--){
+	for(lint j = i - 2;j >= 0; j--){
 		fmulti(f,f,p,f); // f = f*f
 		if(!evaluelinedivi(t,t,b,c,p,temp)){ // temp = l(b) / l'(b) where l is the targent line of t at curve c, and l' is the line through 2t and -2t
 			free(temp); freepoint(t);
@@ -533,12 +550,14 @@ bool miller(POINT * a, POINT * b, CURVE * c, lint m, lint p, FPOINT * f)
 		}
 		fmulti(f,temp,p,f); // f = f * l(b) / l'(b)
 		add(t,t,c,p,t); // t = 2t
+		
 		if(array[j] == 1){
 			if(!evaluelinedivi(t,a,b,c,p,temp)){ // l is the line through t and a, l' throug t+a and -(t+a)
 				free(temp); freepoint(t);
 				return false; 
 			}
 			fmulti(f,temp,p,f); // f = temp * f
+			
 			add(t,a,c,p,t); // t = a + t
 		}
 	}
@@ -560,7 +579,7 @@ lint findorder(POINT * po, CURVE * c, lint p)
 		if(i<6 && pequl(ppower(t,list[i],c,p,t),O)){
 			freepoint(t);
 			return list[i];
-		}else if(pequl(ppower(t,m*list[i%6],c,p,t),O)){
+		}else if(i >= 6 && pequl(ppower(t,m*list[i%6],c,p,t),O)){
 			freepoint(t);
 			return m*list[i%6];
 		}
@@ -584,32 +603,25 @@ bool weilpairing(POINT * a, POINT * b, CURVE * c, lint p, FPOINT * result)
 	else if(m%n == 0)n = m;
 	else
  		return false;
+	
 	POINT * S = newpoint(0,0,0,0), *temp = newpoint(0,0,0,0), *temp1 = newpoint(0,0,0,0), *temp2 = newpoint(0,0,0,0);
 	
 	while(true){
 		freepoint(S);
 		S = randompoint(c,p); // random point on c
 		
-		
-		
-		//phi(S,p,S);
-		
-		showpoint(S);
-		
-		if(!miller(a,add(S,b,c,p,temp),c,n,p,t1))continue; // t1 = f_a(S+b)
-		if(!miller(a,S,c,n,p,t2))continue; // t2 = f_a(S)
-		if(!miller(b,minus(a,S,c,p,temp),c,n,p,t3))continue; // t3 = f_b(a-S)
-		if(!miller(b,pneg(S,p,temp),c,m,p,t4))continue; // t4 = f_b(-S)
-		
-		
-		
-		showpoint(S); 
+		if(rand()%2)phi(S,p,S);
+
+		if(!miller(a,add(S,b,c,p,temp),c,p,n,t1))continue; // t1 = f_a(S+b)
+		if(!miller(a,S,c,p,n,t2))continue; // t2 = f_a(S)
+		if(!miller(b,minus(a,S,c,p,temp),c,p,n,t3))continue; // t3 = f_b(a-S)
+		if(!miller(b,pneg(S,p,temp),c,p,n,t4))continue; // t4 = f_b(-S)
 		
 		assign(result,t1); fmulti(result,t4,p,result); // result = f_a(S+b) * f_b(-S)
 		fmulti(result,inverse(t2,p,t1),p,result); // result = f_a(S+b) * f_b(-S) / f_a(S)
 		fmulti(result,inverse(t3,p,t1),p,result); // result = f_a(S+b) * f_b(-S) / f_a(S) * f_b(a-S)
 		
-		
+
 		// l through a and -S, l' through a - 2S and 2S - a, evaluation at S + b
 		if(!evaluelinedivi(a,pneg(S,p,temp1),add(S,b,c,p,temp2),c,p,t1))continue;
 		
@@ -646,6 +658,8 @@ bool weilpairing(POINT * a, POINT * b, CURVE * c, lint p, FPOINT * result)
 	return true;
 }
 
+
+
 void init()
 {
 	ONE = newfpoint(0,1);
@@ -654,45 +668,39 @@ void init()
 	srand((int)time(0));
 }
 
+
 int main()
 {
 	init();
-	lint p=11;
+	lint p=48611;
 	FPOINT * test = newfpoint(0,14);
 	FPOINT * test1;
 	
 	CURVE * c = newcurve(0,1); 
 	
-	POINT * P1, * P2, * temp = newpoint(0,0,0,0);
+	POINT * P1, * P2, * P3, * temp = newpoint(0,0,0,0);
 	
 	//add(P,P,c,p,P);
 	
-	P1 = newpoint(0,0,0,1);
-	P2 = newpoint(0,9,0,2);
+	P1 = newpoint(0,35994,0,12884); //8
+	P2 = newpoint(0,28328,0,38900); //8
+	P3 = newpoint(0,41736,0,26322); //
 	
-	showelement(primitroot(p));
+	showpoint(P1);showpoint(P2);showpoint(P3);
 	
-	//phi(P2,p,P2);
-	//phi(P2,p,P1);
+	phi(P2,p,temp);
+	
+	weilpairing(P1,P1,c,p,test);showelement(test);
+	weilpairing(P1,temp,c,p,test);showelement(test);
+	weilpairing(P2,temp,c,p,test);showelement(test);
+	weilpairing(add(P1,P2,c,p,P3),temp,c,p,test);showelement(test);
 	
 	
-	showpoint(P1);
-	showpoint(P2);
+	printf("%lld\n",findorder(P3,c,p));
 	
-	//ppower(P1,2,c,p,P2);
+	printf("%lld\n",findorder(P1));
 	
-	if(weilpairing(P1,P1,c,p,test))showelement(test);
-	else
-		printf("fail!\n");
-	
-	fpower(test,6,p,test);showelement(test);
-	
-	printf("%d\n",findorder(P1,c,p));
-	printf("%d\n",findorder(P2,c,p));
-	
-	//pneg(P,p,P);
-	
-	//passign(P,O);
+	//showelement(fpower(test,8,p,test));
 	
 	return 0;
 }
