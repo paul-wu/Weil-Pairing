@@ -55,6 +55,8 @@ EOF :=
 
 lint global_p;
 
+CURVE * global_curve;
+
 char * TYPE[3] = {"num","felement","point"};
 char * KEY[10] = {"randomprime","modsqrt","modpower","select","mod","curve","remove","var"};
 
@@ -94,9 +96,11 @@ void statement(int header);
 
 VALU * expression(int * start);
 
-VALU * term(int start);
+VALU * term(int * start);
 
-VALU * tuple(int start);
+VALU * tuple(int * start, char * key);
+
+VALU * bracket(int * start);
 
 int MIN(int a,int b)
 {
@@ -213,9 +217,9 @@ VAR * newvariable()
 	result->type = 0;
 	result->value = 0;
 	result->tag = 0;
-	result->fvalue = NULL;
-	result->pvalue = NULL;
-	result->c = NULL;
+	result->fvalue = newfpoint(0,0);
+	result->pvalue = newpoint(0,0,0,0);
+	result->c = newcurve(0,0);
 	return result;
 }
 
@@ -443,10 +447,10 @@ bool assignvariable(VALU * val, char * name)
 	return true;
 }
 
-bool checeof(TOKEN * t)
+bool checkchar(TOKEN * t, char c)
 {
-	if(t->type == 0 && t->c == ';')return true;
-	return false;
+	if(t->type == 0 && t->c == c)return true;
+	return false;	
 }
 
 void statement(int header)
@@ -455,14 +459,14 @@ void statement(int header)
 	
 	if(header >= tokenlen)return;
 	
-	if(checeof(tokenlist[header])){
+	if(	checkchar(tokenlist[header],';')){
 		statement(header+1);
 		return;
 	}
 	
 	if(tokenlist[header]->type == 1 && strcamp(tokenlist[header]->vaule,"var")){
 		while(++header < tokenlen){
-			if(checeof(tokenlist[header])){
+			if(checkchar(tokenlist[header],';')){
 				statement(header+1);
 				return;
 			}else if(tokenlist[header]->type == 0){
@@ -479,7 +483,7 @@ void statement(int header)
 	
 	if(tokenlist[header]->type == 1 && strcamp(tokenlist[header]->vaule,"del")){
 		while(++header < tokenlen){
-			if(checeof(tokenlist[header])){
+			if(checkchar(tokenlist[header],';')){
 				statement(header+1);
 				return;
 			}else if(tokenlist[header]->type == 0){
@@ -506,7 +510,7 @@ void statement(int header)
 			}else
 				break;
 		}
-		if(header < tokenlen && checeof(tokenlist[header])){
+		if(header < tokenlen && checkchar(tokenlist[header],';')){
 			statement(header+1);
 			return;
 		}
@@ -527,19 +531,105 @@ void statement(int header)
 	statement(header);
 }
 
+bool addv(VALU * a, VALU * b, VALU * result)
+{
+	if(a->type == 0 && b->type == 0){
+		result->type = 0; result->value = a->value + b->value;
+		return true;
+	}
+	if(a->type == 1 || b->type == 1){
+		result->type = 1; fadd(a->fvalue,b->fvalue,global_p,result->fvalue);
+		return true;
+	}
+	if(a->type == 2 && b->type == 2){
+		result->type = 2; add(a->pvalue,b->pvalue,global_curve,global_p,result->pvalue);
+		return true;
+	}
+	if(a->type == 0 && b->type == 1){
+		result->type = 1; result->fvalue->x = b->fvalue->x; result->fvalue->y = ABS(b->fvalue->y+a->value,global_p);
+		return true;
+	}
+	if(a->type == 1 && b->type == 0)return addv(b,a,result);
+	return false;
+}
+
+bool minuv(VALU * a, VALU * b, VALU * result)
+{
+	if(a->type == 0 && b->type == 0){
+		result->type = 0; result->value = a->value - b->value;
+		return true;
+	}
+	if(a->type == 1 || b->type == 1){
+		result->type = 1; fminus(a->fvalue,b->fvalue,global_p,result->fvalue);
+		return true;
+	}
+	if(a->type == 2 && b->type == 2){
+		result->type = 2; minus(a->pvalue,b->pvalue,global_curve,global_p,result->pvalue);
+		return true;
+	}
+	if(a->type == 0 && b->type == 1){
+		result->type = 1; result->fvalue->x = ABS(-b->fvalue->x,global_p); result->fvalue->y = ABS(a->value-b->fvalue->y,global_p);
+		return true;
+	}
+	if(a->type == 1 && b->type == 0){
+		result->type = 1; result->fvalue->x = b->fvalue->x; result->fvalue->y = ABS(b->fvalue->y-a->value,global_p);
+		return true;
+	}
+	return false;
+}
+
+bool multiv(VALU * a,VALU * b, VALU * result)
+{
+	if(a->type == 0 && b->type == 0){
+		result->type = 0;result->value = a->value * b->value;
+		return true;
+	}
+	if(a->type == 1 && b->type == 1){
+		result->type = 1; fmulti(a->fvalue,b->fvalue,global_p,result->fvalue);
+		return true;
+	}
+	if(a->type == 0 && b->type == 1){
+		result->type = 1; fnmulti(b->fvalue,a->value,global_p,result->fvalue);
+		return true;
+	}
+	if(a->type == 1 && b->type == 0)return multiv(b,a,result);
+	if(a->type == 0 && b->type == 2){
+		result->type = 2; ppower(b->pvalue,a->value,global_curve,global_p,result->pvalue);
+		return true;
+	}
+	if(a->type == 2 && b->type == 0)return multiv(b,a,result);
+	return false;
+	
+}
+
+bool diviv(VALU * a,VALU * b, VALU * result)
+{
+	FPOINT * temp = newfpoint(0,0);
+	
+	if(a->type == 0 && b->type == 0){
+		result->type = 0; a->value = a->value / b->value;
+		return true;
+	}
+	if(a->type == 1 && b->type == 1){
+		result->type = 1; fmulti(a->fvalue,inverse(b->fvalue,global_p,temp),global_p,result->fvalue);
+		return true;
+	}
+	return false;
+}
 
 VALU * expression(int * start)
 {
-	if(*start >= tokenlen || (tokenlist[*start]->type == 0 && tokenlist[*start]->c == ';')){
+	if(*start >= tokenlen || checkchar(tokenlist[*start],';')){
 		*start += 1;
 		return NULL;
 	}
 	
-	VALU * result;
+	VALU * result = NULL;
 	
+	//when the first token be  a literal
 	if(tokenlist[*start]->type == 1){
 		char * name = tokenlist[*start]->vaule;
-		if(*start + 1 < tokenlen && tokenlist[*start + 1]->type == 0 && tokenlist[*start+1]->c == '='){
+		if(*start + 1 < tokenlen && checkchar(tokenlist[*start+1],'=')){ // assign expression
 			if(checknum(name[0])){
 				printf("Can't assign value to '%s', it's not a valid variable name.\n",name);
 				return NULL;
@@ -551,36 +641,164 @@ VALU * expression(int * start)
 			}
 			return result;
 		}
-		if(*start + 1 >= tokenlen || checeof(tokenlist[*start+1])){
-			if(!checknum(name[0])){
-				VAR * temp = findvariable(name);
-				if(temp == NULL){
-					printf("'%s' is not defined.\n",name);
-					*start += 2;
-					return NULL;
-				}
-				result = newvalue(temp->type,temp->value,temp->fvalue,temp->pvalue,temp->c);
-			}else if(checkint(name)){
-				result = newvalue(0,parseint(name),NULL,NULL,NULL);
-			}else
-				printf("Syntax Error! Can't parse '%s' to be an integer.\n",name);
-			*start += 2; 
-			return result;
-		}
 	}
+	
+	result = term(start);
+	
+	if(result == NULL)return NULL;
+	
+	if(*start >= tokenlen || checkchar(tokenlist[*start],';') || checkchar(tokenlist[*start],')') || checkchar(tokenlist[*start],',')){ // end of expression
+		*start += 1;
+		return result;
+	}
+	if(checkchar(tokenlist[*start],'+')){ // if add
+		*start += 1;
+		VALU * temp = expression(start);
+		
+		if(temp == NULL || result == NULL){
+			if(result)freevalu(result);
+			if(temp)freevalu(temp); 
+			result = NULL;
+			return NULL;
+		}
+		
+		int ty = result->type;
+		
+		if(!addv(result,temp,result)){
+			printf("Type '%s' and Type '%s' can not be added.\n",TYPE[temp->type],TYPE[ty]);
+			freevalu(result);
+			result = NULL;
+		}
+		freevalu(temp);
+		return result;
+	}
+	if(checkchar(tokenlist[*start],'-')){ // if minus
+		*start += 1;
+		VALU * temp = expression(start);
+		
+		if(temp == NULL || result == NULL){
+			if(result)freevalu(result);
+			if(temp)freevalu(temp);
+			result = NULL;
+			return NULL;
+		}
+		
+		int ty = result->type;
+		
+		if(!minuv(result,temp,result)){
+			printf("Type '%s' can not minus Type '%s'.\n",TYPE[temp->type],TYPE[ty]);
+			freevalu(result);
+			result = NULL;
+		}
+		freevalu(temp);
+		return result;
+	}
+	
+	printf("Syntax Error! Invalid expression.\n");
+	
 	return NULL;
 }
 
 VALU * term(int * start)
 {
+	if(*start >= tokenlen || checkchar(tokenlist[*start],';'))return NULL;
+
+	VALU * result = NULL;
 	
+	if(tokenlist[*start]->type == 0){
+		if(tokenlist[*start]->c == '('){
+			*start += 1;
+			result = expression(start);
+		}else{
+			printf("Syntax Error! Unexpected charactor '%c'.\n",tokenlist[*start]->c);
+			return NULL;
+		}
+	}else{
+		char * name = tokenlist[*start]->vaule;
+		*start += 1;
+		
+		if(*start < tokenlen && checkchar(tokenlist[*start],'(')){
+			*start += 1;	
+			result = tuple(start,name);
+		}else{
+			if(checkint(name)){
+				lint t = parseint(name);
+				result = newvalue(0,t,NULL,NULL,NULL);
+			}else{
+				VAR * v = findvariable(name);
+
+				if(!v){
+					printf("'%s' has not been defined.\n",name);
+					return NULL;
+				}
+				
+				result = newvalue(v->type,v->value,v->fvalue,v->pvalue,v->c);
+			}
+		}
+		
+	}
+	
+	if(result == NULL)return NULL;
+	
+	int ty = result->type;
+	
+	if(*start >= tokenlen || checkchar(tokenlist[*start],';') || checkchar(tokenlist[*start],')') || checkchar(tokenlist[*start],',') || checkchar(tokenlist[*start],'+') || checkchar(tokenlist[*start],'-')){ // end of expression
+		return result;
+	}	
+	if(checkchar(tokenlist[*start],'*')){
+		*start += 1;
+		VALU * temp = term(start);
+				
+		if(temp == NULL || result == NULL){
+			if(result)freevalu(result);
+			if(temp)freevalu(temp);
+			result = NULL;
+			return NULL;
+		} 
+				
+		if(!multiv(result,temp,result)){
+			printf("Type '%s' and Type '%s' can not be multiplied.\n",TYPE[temp->type],TYPE[ty]);
+			freevalu(result);
+			result = NULL;
+		}
+		freevalu(temp);
+		return result;
+	}
+	if(checkchar(tokenlist[*start],'/')){
+		*start += 1;
+		
+		VALU * temp = term(start);
+		
+		if(temp == NULL || result == NULL){
+			if(result)freevalu(result);
+			if(temp)freevalu(temp);
+			result = NULL;
+			return NULL;
+		}
+		if(!diviv(result,temp,result)){
+			printf("Type '%s' can not divide Type '%s'.\n",TYPE[temp->type],TYPE[ty]);
+			freevalu(result);
+			result = NULL;
+		}
+		freevalu(temp);
+		return result; 
+	}
+	printf("Syntax Error! Invalid term.\n");
+	return NULL;
+}
+
+VALU * tuple(int *start, char * key)
+{
+	//TODO
+	
+	return NULL;
 }
 
 void help()
 {
 	//TODO
 	
-	printf("No help currently.\n");
+	printf("No help currently avialable.\n");
 }
 
 void init_system()
