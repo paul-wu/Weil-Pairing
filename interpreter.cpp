@@ -53,7 +53,7 @@ EOF :=
 #define MAX_STR 1000
 
 
-lint global_p;
+lint global_p = 23;
 
 CURVE * global_curve;
 
@@ -226,11 +226,17 @@ VAR * newvariable()
 VALU * newvalue(int type,lint value,FPOINT * fvalue, POINT * pvalue, CURVE * c)
 {
 	VALU * result = (VALU *)malloc(sizeof(valu));
+	
+	result->fvalue = newfpoint(0,0);
+	result->pvalue = newpoint(0,0,0,0);
+	result->c = newcurve(0,0);
+	
 	result->type = type;
 	result->value = value;
-	result->fvalue = fvalue;
-	result->pvalue = pvalue;
-	result->c = c;
+	
+	if(fvalue)assign(result->fvalue,fvalue);
+	if(pvalue)passign(result->pvalue,pvalue);
+	if(c)curveassign(result->c,c);
 	
 	return result;
 }
@@ -254,25 +260,21 @@ bool putvariable(int type, char * name,lint value, FPOINT * fvalue, POINT * pval
 	cu->type = type;
 	
 	if(cu->name != NULL)free(cu->name);
-	if(cu->fvalue != NULL)free(cu->fvalue);
-	if(cu->pvalue != NULL)free(cu->pvalue);
-	if(cu->c != NULL)free(cu->c);
 
 	cu->name = copystring(name);
 	
 	switch(type){
 		case 0:
 			cu->value = value;
-			cu->fvalue = NULL; cu->pvalue = NULL; cu->c = NULL;
 			break;
 		case 1:
-			cu->fvalue = fvalue;cu->pvalue = NULL;cu->c = NULL;
+			if(fvalue)assign(cu->fvalue,fvalue);
 			break;
 		case 2:
-			cu->fvalue = NULL;cu->pvalue = pvalue;cu->c = NULL;
+			if(pvalue)passign(cu->pvalue,pvalue); 
 			break;
 		case 3:
-			cu->fvalue = NULL;cu->pvalue = pvalue;cu->c = c;
+			if(c)curveassign(cu->c,c);
 		default:
 			break;
 	}
@@ -437,12 +439,9 @@ bool assignvariable(VALU * val, char * name)
 	else{
 		current->type = val->type;
 		current->value = val->value;
-		if(current->fvalue!=NULL)free(current->fvalue);
-		//if(current->pvalue!=NULL)freepoint(current->pvalue);
-		if(current->c != NULL)freecurve(current->c);
-		current->fvalue = val->fvalue;
-		current->pvalue = val->pvalue;
-		current->c = val->c; 
+		if(val->fvalue)assign(current->fvalue,val->fvalue);
+		if(val->pvalue)passign(current->pvalue, val->pvalue);
+		if(val->c)curveassign(current->c,val->c); 
 	}
 	return true;
 }
@@ -707,8 +706,21 @@ VALU * term(int * start)
 	
 	if(tokenlist[*start]->type == 0){
 		if(tokenlist[*start]->c == '('){
-			*start += 1;
-			result = expression(start);
+			if(*start + 4 < tokenlen && checkchar(tokenlist[*start + 2],',') && checkchar(tokenlist[*start+4],')')){
+				char * name1 = tokenlist[*start+1]->vaule, *name2 = tokenlist[*start + 3]->vaule;
+				
+				if(checkint(name1) && checkint(name2)){
+					FPOINT * temp = newfpoint(ABS(parseint(name1),global_p),ABS(parseint(name2),global_p));
+					result = newvalue(1,0,temp,NULL,NULL);
+					*start += 5;
+				}else{
+					printf("Syntax Error! Can't parse '(%s,%s)' to be an field element.\n",name1,name2);
+					return NULL;
+				}
+			}else{
+				*start += 1;
+				result = expression(start);
+			}
 		}else{
 			printf("Syntax Error! Unexpected charactor '%c'.\n",tokenlist[*start]->c);
 			return NULL;
@@ -747,6 +759,7 @@ VALU * term(int * start)
 	}	
 	if(checkchar(tokenlist[*start],'*')){
 		*start += 1;
+		
 		VALU * temp = term(start);
 				
 		if(temp == NULL || result == NULL){
