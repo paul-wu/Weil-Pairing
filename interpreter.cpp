@@ -60,7 +60,8 @@ char * KEY[10] = {"randomprime","modsqrt","modpower","select","mod","curve","rem
 
 typedef struct variable{
 	char * name;
-	int type,value,tag;
+	int type,tag;
+	lint value;
 	FPOINT * fvalue;
 	POINT * pvalue;
 	CURVE * c;
@@ -68,25 +69,34 @@ typedef struct variable{
 
 typedef struct valu{
 	int type;
-	int value;
+	lint value;
 	FPOINT * fvalue;
 	POINT * pvalue;
 	CURVE * c;
 }VALU;
 
-char specialchar[30] = ".,\\{}[]()+-*/%$@#!?`~<>:|=^&\"";
+typedef struct toke{
+	int type;
+	char * vaule,c;
+}TOKEN;
+
+char specialchar[32] = ".,\\{}[]()+-*/%$;@#!?`~<>:'|=^&\"";
 
 int CURRENT_VAR_NUM = 0;
 
-VAR * list[MAX_VAR];
+VAR * list[MAX_VAR] = { NULL };
 
-void statement(char * input, int header);
+TOKEN * tokenlist[MAX_VAR] = { NULL };
 
-VAR * expression(char * input, int start, int end);
+int tokenlen = 0;
 
-VAR * term(char * input, int start, int end);
+void statement(int header);
 
-VAR * tuple(char * input, int start, int end);
+VALU * expression(int * start);
+
+VALU * term(int start);
+
+VALU * tuple(int start);
 
 int MIN(int a,int b)
 {
@@ -167,11 +177,13 @@ lint parseint(char * num)
 	
 	if(len < 0)return 0;
 	
-	result += num[len] - '0';
+	int i = 0;
 	
-	while(--len >= 0){
+	result += num[i] - '0';
+	
+	while(++i <= len){
 		result *= 10;
-		if(num[len] != '0')result += num[len] - '0';	
+		if(num[i] != '0')result += num[i] - '0';	
 	}
 	
 	return result;
@@ -196,15 +208,45 @@ char * copystring(char * a)
 	return result;
 }
 
-bool putvariable(int type, char * name,lint value, FPOINT * fvalue, POINT * pvalue, CURVE * c)
+VAR * newvariable()
 {
-	int i = findavailablevariable();
+	VAR * result = (VAR *)malloc(sizeof(variable));
+	result->name = NULL;
+	result->type = 0;
+	result->value = 0;
+	result->tag = 0;
+	result->fvalue = NULL;
+	result->pvalue = NULL;
+	result->c = NULL;
+	return result;
+}
+
+VALU * newvalue(int type,lint value,FPOINT * fvalue, POINT * pvalue, CURVE * c)
+{
+	VALU * result = (VALU *)malloc(sizeof(valu));
+	result->type = type;
+	result->value = value;
+	result->fvalue = fvalue;
+	result->pvalue = pvalue;
+	result->c = c;
 	
-	if(i > MAX_VAR)return false;
+	return result;
+}
+
+bool putvariable(int type, char * name,lint value, FPOINT * fvalue, POINT * pvalue, CURVE * c)
+{	
+	if(name == NULL || findvariable(name))return false;
+	
+	int i = findavailablevariable();
+
+	if(i > MAX_VAR){
+		printf("Maximum varibale size excced.\n");
+		return false;
+	}
+
+	if(list[i] == NULL)list[i] = newvariable();
 	
 	VAR * cu = list[i];
-	
-	if(cu == NULL)cu = (VAR *)malloc(sizeof(variable));
 	
 	cu->tag = 1;
 	cu->type = type;
@@ -213,7 +255,7 @@ bool putvariable(int type, char * name,lint value, FPOINT * fvalue, POINT * pval
 	if(cu->fvalue != NULL)free(cu->fvalue);
 	if(cu->pvalue != NULL)free(cu->pvalue);
 	if(cu->c != NULL)free(cu->c);
-	
+
 	cu->name = copystring(name);
 	
 	switch(type){
@@ -233,7 +275,7 @@ bool putvariable(int type, char * name,lint value, FPOINT * fvalue, POINT * pval
 			break;
 	}
 	
-	CURRENT_VAR_NUM = i;
+	CURRENT_VAR_NUM = MAX(CURRENT_VAR_NUM, i+1);
 	return true;
 }
 
@@ -266,26 +308,28 @@ bool transparentchar(char c)
 bool isspacialchar(char c)
 {	
 	if(transparentchar(c))return true;
-	for(int i = 0;i < 30;i++){
+	for(int i = 0;i < 32;i++){
 		if(c == specialchar[i])return true;
 	} 
 	return false;
 }
 
-int moveahead(char * input, int curren_head)
+int moveahead(char * input, int curren_head, int len)
 {
-	int len = strlen(input);
+	//int len = strlen(input);
+	
+	if(curren_head >= len)return len;
 	
 	while(curren_head < len && transparentchar(input[curren_head++]));
 	
 	return curren_head - 1;
 }
 
-char * nextliteral(char * input, int curren_head, int * pos)
+char * nextliteral(char * input, int curren_head, int len ,int * pos)
 {	
-	int len = strlen(input);
+	//int len = strlen(input);
 	
-	int start = moveahead(input,curren_head);
+	int start = moveahead(input,curren_head,len);
 	
 	curren_head = start;
 	
@@ -302,9 +346,9 @@ int nexteof(char * input, int curren_head)
 	return curren_head;
 }
 
-int nextchar(char * input, char c, int current_head)
+int nextchar(char * input, char c, int current_head, int len)
 {
-	int len = strlen(input);
+	//int len = strlen(input);
 	
 	while(current_head < len && input[current_head++] != c);
 	
@@ -313,7 +357,7 @@ int nextchar(char * input, char c, int current_head)
 	return len;
 }
 
-void showvalue(VAR * v)
+void showvalue(VALU * v)
 {
 	if(v == NULL)return;
 	switch(v->type){
@@ -334,114 +378,204 @@ void showvalue(VAR * v)
 	}
 }
 
-void statement(char * input, int header)
+
+void showvar(VAR * v)
 {
-	int len = strlen(input);
-	VAR * newvar;
-	
-	if(len == 0){
+	if(v==NULL){
+		printf("(null)\n");
 		return;
 	}
-	
-	header = moveahead(input,header);
-	if(header >= len){
-		return;
+	printf("Name: %s\n",v->name);
+	printf("Type: %s\n",TYPE[v->type]);
+	printf("Value: ");
+	if(v == NULL)return;
+	switch(v->type){
+		case 0:
+			printf("%lld\n",v->value);
+			break;
+		case 1:
+			printf("(%lld,%lld)\n",v->fvalue->x,v->fvalue->y);
+			break;
+		case 2:
+			printf("[(%lld,%lld),(%lld,%lld)]\n",v->pvalue->x->x,v->pvalue->x->y,v->pvalue->y->x,v->pvalue->y->y);
+			break;
+		case 3:
+			printf("Curve: y*y = x*x*x + %lld*x + %lld\n",v->c->A,v->c->B);
+			break;
+		default:
+			printf("unknow type.\n");
 	}
-	
-	if(checknum(input[header])){
-		int next = nextchar(input,';',header);
-		
-		newvar = expression(input,header,next);
-		
-		if(newvar == NULL){
-			statement(input,next+1);
-			return;
-		}
-		showvalue(newvar);
-		return;
-	}
-	
-	if(input[header] == ';'){
-		statement(input,header+1);
-		return;
-	}
-	
-	int next;
-	char * key = nextliteral(input,header,&next);
-	
-	if(strcamp(key,"var")){
-		
-		if(key != NULL)free(key);
-		key = nextliteral(input,next,&next);
-		next = moveahead(input,next);
-		
-		if(key == NULL){
-			printf("You should specify a name to the variable.\n");
-			return;
-		}
-		
-		if(checknum(key[0])){
-			printf("Variable should not start with an number.\n");
-			return;
-		}
-		
-		if(input[next] == '='){
-			if(findvariable(key) != NULL){
-				printf("Variable name '%s' has been use before, please specify a new one.\n",key);
-				if(key!=NULL)free(key);
-				return;
-			}
-			int end = nextchar(input,';',next);
-			newvar = expression(input,next,end);
-			
-			if(newvar == NULL){
-				printf("Can't build new variable beacause of nuknown expression value.\n");
-				free(key);
-				if(key!=NULL)free(key);
-				return;
-			}
-			putvariable(newvar->type,key,newvar->value,newvar->fvalue,newvar->pvalue,newvar->c);
-			free(key);
-			statement(input,end+1);
-			if(key!=NULL)free(key);
-			return;
-		}
-		printf("Error! You must specify the initial value when build a new variable.\n");
-		if(key!=NULL)free(key);
-		return;
-	}
-	
-	if(strcamp(key,"del")){
-		if(key != NULL)free(key);
-		key = nextliteral(input,next,&next);
-		next = moveahead(input,next);
-		
-		if(key == NULL){
-			printf("No variable been deleted.\n");
-			return;
-		}
-		
-		if(deletvariable(key)){
-			printf("%s has been deleted.\n",key);
-			int end = nextchar(input,';',next);
-			
-			statement(input,end);
-			
-			if(key!=NULL)free(key);
-			return;
-		}
-		printf("%s has not been defined yet.\n",key);
-		if(key!=NULL)free(key);
-		return;
-	}
-	
+	printf("\n");
 }
 
-VAR * expression(char * input, int start,int end)
+void freevalu(VALU * a)
 {
-	//TODO
+	if(a == NULL)return;
 	
+	if(a->fvalue != NULL)free(a->fvalue);
+	if(a->c != NULL)free(a->c);
+	//if(a->pvalue != NULL)freepoint(a->pvalue);
+	
+	free(a);
+}
+
+void freecurve(CURVE * c)
+{
+	if(c->A)free(c->A);
+	if(c->B)free(c->B);
+	free(c);
+}
+
+bool assignvariable(VALU * val, char * name)
+{
+	VAR * current = findvariable(name);
+	if(current == NULL){
+		return putvariable(val->type,name,val->value,val->fvalue,val->pvalue,val->c);
+	}
+	else{
+		current->type = val->type;
+		current->value = val->value;
+		if(current->fvalue!=NULL)free(current->fvalue);
+		//if(current->pvalue!=NULL)freepoint(current->pvalue);
+		if(current->c != NULL)freecurve(current->c);
+		current->fvalue = val->fvalue;
+		current->pvalue = val->pvalue;
+		current->c = val->c; 
+	}
+	return true;
+}
+
+bool checeof(TOKEN * t)
+{
+	if(t->type == 0 && t->c == ';')return true;
+	return false;
+}
+
+void statement(int header)
+{
+	VALU * newvar;
+	
+	if(header >= tokenlen)return;
+	
+	if(checeof(tokenlist[header])){
+		statement(header+1);
+		return;
+	}
+	
+	if(tokenlist[header]->type == 1 && strcamp(tokenlist[header]->vaule,"var")){
+		while(++header < tokenlen){
+			if(checeof(tokenlist[header])){
+				statement(header+1);
+				return;
+			}else if(tokenlist[header]->type == 0){
+				printf("Syntax Error!\n");
+				return;
+			}if(checknum(tokenlist[header]->vaule[0])){
+				printf("Variable can't start with number.\n");
+				return;
+			}
+			putvariable(0,tokenlist[header]->vaule,0,NULL,NULL,NULL);
+		}
+		return;
+	}
+	
+	if(tokenlist[header]->type == 1 && strcamp(tokenlist[header]->vaule,"del")){
+		while(++header < tokenlen){
+			if(checeof(tokenlist[header])){
+				statement(header+1);
+				return;
+			}else if(tokenlist[header]->type == 0){
+				printf("Syntax Error!\n");
+				return;
+			}
+			if(deletvariable(tokenlist[header]->vaule)){
+				printf("'%s' has been deleted.\n",tokenlist[header]->vaule);
+			}else
+				printf("Varibale '%s' do not exist.\n", tokenlist[header]->vaule);
+		}
+		return;
+	}
+	
+	if(tokenlist[header]->type == 1 && strcamp(tokenlist[header]->vaule,"check")){
+		while(++header < tokenlen){
+			if(tokenlist[header]->type == 1){
+				VAR * get = findvariable(tokenlist[header]->vaule);
+				if(get == NULL){
+					printf("Can't find variable '%s'.\n",tokenlist[header]->vaule);
+					return;
+				}
+				showvar(get);
+			}else
+				break;
+		}
+		if(header < tokenlen && checeof(tokenlist[header])){
+			statement(header+1);
+			return;
+		}
+		if(header < tokenlen){
+			printf("Syntax Error!.\n");
+			return;
+		}
+	}
+	
+	newvar = expression(&header);
+
+	if(newvar == NULL)return;
+	
+	showvalue(newvar);
+
+	freevalu(newvar);
+	
+	statement(header);
+}
+
+
+VALU * expression(int * start)
+{
+	if(*start >= tokenlen || (tokenlist[*start]->type == 0 && tokenlist[*start]->c == ';')){
+		*start += 1;
+		return NULL;
+	}
+	
+	VALU * result;
+	
+	if(tokenlist[*start]->type == 1){
+		char * name = tokenlist[*start]->vaule;
+		if(*start + 1 < tokenlen && tokenlist[*start + 1]->type == 0 && tokenlist[*start+1]->c == '='){
+			if(checknum(name[0])){
+				printf("Can't assign value to '%s', it's not a valid variable name.\n",name);
+				return NULL;
+			}
+			*start += 2;
+			result = expression(start);
+			if(result != NULL){
+				assignvariable(result,name);
+			}
+			return result;
+		}
+		if(*start + 1 >= tokenlen || checeof(tokenlist[*start+1])){
+			if(!checknum(name[0])){
+				VAR * temp = findvariable(name);
+				if(temp == NULL){
+					printf("'%s' is not defined.\n",name);
+					*start += 2;
+					return NULL;
+				}
+				result = newvalue(temp->type,temp->value,temp->fvalue,temp->pvalue,temp->c);
+			}else if(checkint(name)){
+				result = newvalue(0,parseint(name),NULL,NULL,NULL);
+			}else
+				printf("Syntax Error! Can't parse '%s' to be an integer.\n",name);
+			*start += 2; 
+			return result;
+		}
+	}
 	return NULL;
+}
+
+VALU * term(int * start)
+{
+	
 }
 
 void help()
@@ -458,7 +592,7 @@ void init_system()
 	printf("    Welcome to use weil pairing demostration interpreter\n");
 	printf("------------------------------------------------------------\n");
 	printf("Version 2.7\n");
-	printf("Copyrigth (c) 2015. Wu Changlong<changlong1993@gmail.com>\n");
+	printf("Copyright (c) 2015. Wu Changlong<changlong1993@gmail.com>\n");
 	printf("\n");
 	printf("Hints:\n");
 	printf("1. type 'quit' to exit.\n");
@@ -466,19 +600,70 @@ void init_system()
 	printf("3. type 'reset' to set all the environment.\n");
 	printf("4. type 'help' to get the detailed help.\n");
 	printf("\n");
+	
+	
+	
+}
+
+TOKEN * newtoken(int type, char * value, char c)
+{
+	TOKEN * result = (TOKEN *)malloc(sizeof(toke));
+	result->type = type;
+	result->vaule = value;
+	result->c = c;
+	return result; 
+}
+
+void addtoken(int type, char * value, char c)
+{
+	if(tokenlist[tokenlen] == NULL)tokenlist[tokenlen] = newtoken(type,value,c);
+	else{
+		tokenlist[tokenlen]->type = type;
+		tokenlist[tokenlen]->c = c;
+		if(tokenlist[tokenlen] != NULL)free(tokenlist[tokenlen]->vaule);
+		tokenlist[tokenlen]->vaule = value; 
+	}
+	tokenlen++;
+}
+
+void lex(char * input)
+{
+	int header = 0, len = strlen(input);
+	
+	char * t;
+	
+	while(header < len){
+		header = moveahead(input,header,len);
+		if(isspacialchar(input[header])){
+			addtoken(0,NULL,input[header]);
+			header++; continue;
+		}
+		t = nextliteral(input,header,len,&header);
+		addtoken(1,t,'0');
+	}
+	if(tokenlen > 0 && tokenlist[tokenlen-1]->type == 0 && tokenlist[tokenlen - 1]->c == ' ')tokenlen--;
+}
+
+void showtoken()
+{
+	for(int i = 0;i < tokenlen; i++){
+		if(tokenlist[i]->type == 0)printf(" '%c' ",tokenlist[i]->c);
+		else
+			printf(" '%s' ",tokenlist[i]->vaule);
+	}
+	printf("\n");
 }
 
 int main()
 {
 	char * worktap = (char *)malloc(MAX_STR);
-	char * token = NULL;
 	int pos;
 	
 	printf("------------------------------------------------------------\n");
-	printf("    Welcome to use weil pairing demostration interpreter\n");
+	printf("    Welcome to use Weil pairing demostration interpreter\n");
 	printf("------------------------------------------------------------\n");
 	printf("Version 2.7\n");
-	printf("Copyrigth (c) 2015. Wu Changlong<changlong1993@gmail.com>\n");
+	printf("Copyright (c) 2015. Wu Changlong<changlong1993@gmail.com>\n");
 	printf("\n");
 	printf("Hints:\n");
 	printf("1. type 'quit' to exit.\n");
@@ -487,20 +672,39 @@ int main()
 	printf("4. type 'help' to get the detailed help.\n\n");
 	while(true){
 		printf("> ");
-		gets(worktap);
 		
-		if(token != NULL)free(token);
-		token = nextliteral(worktap,0,&pos);
+		tokenlen = 0;
 		
-		if(strcamp(token,"quit")||strcamp(token,"exit"))break;
-		if(strcamp(token,"help")){
-			help();
-		}else if(strcamp(token,"clear")){
-			system("cls");
-		}else if(strcamp(token,"reset")){
-			init_system();
-		}else
-			statement(worktap,0);
+		while(true){
+			
+			gets(worktap);
+			
+			if(strlen(worktap) == 0){
+				break;
+			}
+			
+			lex(worktap);
+			
+			if(tokenlist[tokenlen-1]->type == 0 && tokenlist[tokenlen-1]->c == ';')continue;
+			break;
+		}
+		
+		if(tokenlen < 1)continue;
+		
+		if(tokenlist[0]->type == 1){
+			if(strcamp(tokenlist[0]->vaule,"quit")||strcamp(tokenlist[0]->vaule,"exit"))break;
+			if(strcamp(tokenlist[0]->vaule,"help")){
+				help();
+				continue;
+			}else if(strcamp(tokenlist[0]->vaule,"clear")){
+				system("cls");
+				continue;
+			}else if(strcamp(tokenlist[0]->vaule,"reset")){
+				init_system();
+				continue;
+			}
+		}
+		statement(0);
 	}
 	
 	free(worktap);
