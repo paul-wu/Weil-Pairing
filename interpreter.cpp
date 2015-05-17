@@ -173,15 +173,13 @@ lint parseint(char * num)
 	
 	if(len == 0 || len > 20)return 0;
 	
-	while(--len >= 0 && num[len] == '0');
-	
 	if(len < 0)return 0;
 	
 	int i = 0;
 	
 	result += num[i] - '0';
 	
-	while(++i <= len){
+	while(++i < len){
 		result *= 10;
 		if(num[i] != '0')result += num[i] - '0';	
 	}
