@@ -1,11 +1,21 @@
 #include"elliptic.h"
 
+FPOINT * ZERO, * ONE;//zero element in field
+POINT * O;//infinte point
+
 FPOINT * newfpoint(lint x, lint y)
 {
 	FPOINT * result = (FPOINT *)malloc(sizeof(fpoint));
 	result->x = x;
 	result->y = y;
 	return result;
+}
+
+CURVE * curveassign(CURVE * a, CURVE * b)
+{
+	assign(a->A,b->A);
+	assign(a->B,b->B);
+	return a;
 }
 
 POINT * newpoint(lint a, lint b, lint c, lint d)
@@ -102,31 +112,34 @@ lint modsquareroot(lint a, lint p)
 	return ABS(powermod(a,(x+1)>>1,p)*powermod(b,y>>1,p),p);
 }
 
-bool millerrabin(lint n, lint r)
+lint Randnum(lint n)
 {
-	if(n <= 1)return false;
-	
-	lint s = 0, t = n - 1;
-	
+	if(n < 3)n = 3;
+	while(true){
+		int i = rand()%n;
+		if(i >= 2)return i;
+	}
+}
+
+bool millerrabin(lint n, lint r)
+{	
+	if(n < 0)n = -n;
+	if(n == 2)return true;
+	lint s = 0, t = n - 1, b, x;
+	if(n <= 1 || !(n&1))return false;
 	while(!(t&1)){
-		s++; t >>= 1;
+		s++; t>>=1;
 	}
-	while(r--){
-		lint b = rand()%(n-1) + 2;
-		lint r0 = powermod(b,t,n);
-		lint s0 = s - 1;
-		
-		lint c = powermod(b,n-1,n); 
-		
-		if(r0 == 1 || r0 == n - 1)continue;
-		if(s0 < 1)return false;
-		while(s0--){
-			r0 = powermod(r0,2,n);
-			if(r0 == n-1)break;
-			if(s0 == 0)return false;
+L:	while(r-->0){
+		b = Randnum(n);
+		x = powermod(b,t,n);
+		if(x == 1 || x == n - 1)continue;
+		for(lint i = 0; i < s - 1; i++){
+			x = powermod(x,2,n);
+			if(x == n - 1)goto L;
 		}
-	}
-	
+		return false;
+	}	
 	return true;
 } 
 
@@ -146,6 +159,8 @@ lint randomgoodprime(lint n)
 lint randonsafeprime(lint n)
 {
 	lint p;
+	n = (n>=0)?n:-n;
+	if(n < 10)n=10;
 	while(p = randomgoodprime(n)){
 		if(millerrabin((p+1)/12,2))break;
 	}
@@ -526,6 +541,8 @@ bool evaluelinedivi(POINT * a, POINT * b, POINT * in, CURVE * c, lint p, FPOINT 
 
 bool miller(POINT * a, POINT * b, CURVE * c, lint p, lint m, FPOINT * f)
 {
+	if(m%findorder(a,c,p)!=0)return false;
+	
 	FPOINT * temp = newfpoint(0,0);
 	POINT * t = newpoint(0,0,0,0);
 	
@@ -590,23 +607,24 @@ lint findorder(POINT * po, CURVE * c, lint p)
 	return p+1;
 }
 
-bool weilpairing(POINT * a, POINT * b, CURVE * c, lint p, FPOINT * result)
+bool weilpairing(POINT * a, POINT * b, CURVE * c, lint p, lint n ,FPOINT * result)
 {
 	lint m = findorder(a,c,p);
-	lint n = findorder(b,c,p);
+	lint m1 = findorder(b,c,p);
 	
 	FPOINT * t1, * t2, * t3, *t4;
 	t1 = newfpoint(0,0); t2 = newfpoint(0,0); t3 = newfpoint(0,0); t4 = newfpoint(0,0);
 	
 	
-	if(n%m == 0)m = n;
-	else if(m%n == 0)n = m;
-	else
+	int i = 0;
+	if(n%m != 0 || n%m1 != 0)
  		return false;
 	
 	POINT * S = newpoint(0,0,0,0), *temp = newpoint(0,0,0,0), *temp1 = newpoint(0,0,0,0), *temp2 = newpoint(0,0,0,0);
 	
 	while(true){
+		if(i++>1000000)return false;
+		
 		freepoint(S);
 		S = randompoint(c,p); // random point on c
 		
@@ -668,40 +686,56 @@ void init()
 	srand((int)time(0));
 }
 
-
+/*
 int main()
 {
 	init();
 	lint p=48611;
 	FPOINT * test = newfpoint(0,14);
-	FPOINT * test1;
+	FPOINT * test1 = newfpoint(0,1);
 	
 	CURVE * c = newcurve(0,1); 
 	
 	POINT * P1, * P2, * P3, * temp = newpoint(0,0,0,0);
 	
 	//add(P,P,c,p,P);
-	
+	/*
 	P1 = newpoint(0,35994,0,12884); //8
 	P2 = newpoint(0,28328,0,38900); //8
 	P3 = newpoint(0,41736,0,26322); //
 	
-	showpoint(P1);showpoint(P2);showpoint(P3);
+	//showpoint(P1);showpoint(P2);showpoint(P3);
 	
-	phi(P2,p,temp);
+	phi(P1,p,temp);
 	
-	weilpairing(P1,P1,c,p,test);showelement(test);
-	weilpairing(P1,temp,c,p,test);showelement(test);
-	weilpairing(P2,temp,c,p,test);showelement(test);
-	weilpairing(add(P1,P2,c,p,P3),temp,c,p,test);showelement(test);
+	if(weilpairing(P1,temp,c,p,test))showelement(test);
+	else
+		printf("fail!\n");
+	
+	if(weilpairing(temp,P1,c,p,test1))showelement(test1);
+	else
+		printf("fail!\n");
+	
+	showelement(fmulti(test1,test,p,test1));
+	
+	if(weilpairing(P1,ppower(temp,131,c,p,P2),c,p,test))showelement(test);
+	else
+		printf("fail!\n");	
 	
 	
-	printf("%lld\n",findorder(P3,c,p));
 	
-	printf("%lld\n",findorder(P1));
+	if(weilpairing(ppower(P1,131,c,p,P2),temp,c,p,test))showelement(test);
+	else
+		printf("fail!\n");
 	
+	printf("%d\n",millerrabin(5,10));
+	
+	
+	//printf("%lld\n",randonsafeprime(1000));
+	
+	//printf("%lld\n",findorder(P3,c,p));
 	//showelement(fpower(test,8,p,test));
 	
 	return 0;
 }
-
+*/
