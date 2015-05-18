@@ -1095,11 +1095,71 @@ VALU * tuple(int *start, char * key)
 	return NULL;
 }
 
-void help()
+void Sleep(int n)
 {
-	//TODO
-	
-	printf("No help currently avialable.\n");
+	while(n > 0){
+		millerrabin(n,10);
+		n--;
+	}
+}
+
+void slowshow(char * in)
+{
+	int len = strlen(in);
+	int i = 0;
+	while(i < len){
+		printf("%c",in[i]);
+		Sleep(10000);
+		i++;
+	}
+}
+
+void lex(char * input);
+
+void demo()
+{
+	system("cls");
+	char dem[1000] = "We first buid two empty varibales named 'n' and 'm'\n;var n m;\
+	 \nthen assign vlaue to them\n;n = 120;\n;m = 200;\n\
+	 \nGenerate a random prime with lenth m and put it to vairable a\n;a=Randomprime(m);\n \
+	 \nSet global prime\n;global_p = a;\n\
+	 \nEvaluabte an math expression\n;a^2 + m*(n - 12*n)/a +(12*3)*(12+45+34);\n\
+	 \nGenerate an random point and put it to varibale p\n;p = Randompoint();\n\
+	 \nAnother point q\n;q = Randompoint();\n\
+	 \nCompute their order\n;ord(p);\n;ord(q);\n\
+	 \nUse function phi\n;p1 = phi(p);\n\
+	 \nIt's order is\n;r = ord(p1);\n\
+	 \nWe can see it they are the same.\n\
+	 \nCompute weil paring\n;f = pair(p,p1,r);\n\
+	 \nVarify binearity\n;f1 = pair(3*p,p1,r);\n\
+	 \nand f^3 = f1\n;f^3 - f1;\n\
+	 \n;f2 = pair(3*p,5*p1,r);\n\
+	 \n;f^15 - f2;\n\n\nThanks for watching!";
+	int len = strlen(dem);
+	int i = 0, j = 0;
+	while(i < len){
+		if(dem[i] != ';')printf("%c",dem[i]);
+		else{
+			i++;
+			j = nextchar(dem,';',i,len);
+			char * input = substring(dem,i,j);
+			if(!input){
+				i++;continue;
+			}
+			tokenlen = 0;
+			lex(input);
+			printf("> "); 
+			slowshow(input);
+			Sleep(500000);
+			printf("\n");
+			statement(0);
+			free(input);
+			i = j+1;continue;
+		}
+		Sleep(10000);
+		i++;
+	}
+	system("pause");
 }
 
 void init_system()
@@ -1122,7 +1182,41 @@ void init_system()
 	global_p = 23;
 	
 }
-
+void help()
+{
+	system("cls");
+	printf("-------------------------------------------------------------------\n");
+	printf("    This is the weil pairing demostration interpreter help system\n");
+	printf("-------------------------------------------------------------------\n");
+	printf("\n");
+	
+	printf("Function list:\n");
+	printf("1. Randomprime(n) to generate a prime around n\n");
+	printf("2. PrimeQ(n) to test whether n is a prime\n");
+	printf("3. sqrt(n) square root of varibale n\n");
+	printf("3. Randompoint() to generate a random point on current curve n\n");
+	printf("4. Mill(P,Q,m) to comput miller's algorithm\n");
+	printf("5. phi(P) to map point P = (x , y) to the point Q = (\zeta x,y), where \zeta is 3-primitive root.\n");
+	printf("6. Pair(P,Q,n) to compute weil pairing for P,Q with order n\n");
+	
+	
+	printf("\n\nOperation:\n");
+	printf("1. Our langudge compatible with the common mathematical expression completely.\n");
+	printf("2. To buid new variables, you can use 'var name1 name2 name3 ...', or just 'a = value'.\n");
+	printf("3. Use 'del name' to delete the varaible you don't need.\n");
+	printf("4. We have an automatic type inference system, so all the types are generated automaticaly.\n");
+	printf("5. You can use 'check name' to see the total type infomation of the vairable 'name'\n");
+	printf("6. The arithmetic operations is designed to be duplicated: \n");
+	printf("e.g. the expression 'p+q', means natrual number addition when the type of p & q are of type 'num', ");
+	printf("but point addition when the types are 'point'. So, feel free to use the operator as you want.\n");
+	
+	printf("\n\nDo you want to see a dynamic demostration?(Y/N): ");
+	char * f = (char *)malloc(1000);
+	gets(f);
+	if(f && (f[0] == 'y' || f[0] == 'Y' || strcamp(f,"yes") || strcamp(f,"YES")))demo();
+	free(f);
+	init_system();
+}
 TOKEN * newtoken(int type, char * value, char c)
 {
 	TOKEN * result = (TOKEN *)malloc(sizeof(toke));
