@@ -6,7 +6,7 @@ We implemented the Weil pairing of elliptic curve over $\mathbb{F}_{p^2}$, where
 
 **Edit**: We add a new interpreter for this library.
 
-To beluid the interpreter, use the follow compilation command in gcc:
+To build the interpreter, use the follow compilation command in gcc:
 
     g++ - c Miller.cpp interpreter.cpp elliptic.h
     g++ -o interpreter interpreter.o Miller.o
