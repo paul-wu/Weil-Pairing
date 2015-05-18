@@ -362,6 +362,40 @@ int nextchar(char * input, char c, int current_head, int len)
 	return len;
 }
 
+bool iszero(FPOINT * a)
+{
+	if(a->x != 0)return false;
+	if(a->y != 0)return false;
+	return true;
+}
+
+void printcurve(CURVE * c)
+{
+	printf("y^2 = x^3");
+	
+	if(!iszero(c->A)){
+		if(c->A->x == 0){
+			if(c->A->y > 0 && c->A->y != 1)printf(" + %lldx",c->A->y);
+			else if(c->A->y>0 && c->A->y == 1)printf(" + x");
+			else if(c->A->y != -1)printf(" - %lldx",c->A->y);
+			else
+				printf(" - x");
+		}
+		else
+			printf(" + (%lld,%lld)*x",c->A->x,c->A->y);
+	}
+	if(!iszero(c->B)){
+		if(c->B->x == 0){
+			if(c->B->y > 0)printf(" + %lld",c->B->y);
+			else
+				printf(" - %lld",c->B->y);
+		}
+		else
+			printf(" + (%lld,%lld)",c->B->x,c->B->y);
+	}
+	printf("\n");
+}
+
 void showvalue(VALU * v)
 {
 	if(v == NULL)return;
@@ -376,7 +410,7 @@ void showvalue(VALU * v)
 			printf("[(%lld,%lld),(%lld,%lld)]\n",v->pvalue->x->x,v->pvalue->x->y,v->pvalue->y->x,v->pvalue->y->y);
 			break;
 		case 3:
-			printf("Curve: y*y = x*x*x + %lld*x + %lld\n",v->c->A,v->c->B);
+			printcurve(v->c);
 			break;
 		default:
 			printf("unknow type.\n");
@@ -405,7 +439,7 @@ void showvar(VAR * v)
 			printf("[(%lld,%lld),(%lld,%lld)]\n",v->pvalue->x->x,v->pvalue->x->y,v->pvalue->y->x,v->pvalue->y->y);
 			break;
 		case 3:
-			printf("Curve: y*y = x*x*x + %lld*x + %lld\n",v->c->A,v->c->B);
+			printcurve(v->c);
 			break;
 		default:
 			printf("unknow type.\n");
@@ -413,13 +447,15 @@ void showvar(VAR * v)
 	printf("\n");
 }
 
+void freecurve(CURVE * c);
+
 void freevalu(VALU * a)
 {
 	if(a == NULL)return;
 	
 	if(a->fvalue != NULL)free(a->fvalue);
-	if(a->c != NULL)free(a->c);
-	//if(a->pvalue != NULL)freepoint(a->pvalue);
+	if(a->c != NULL)freecurve(a->c);
+	if(a->pvalue != NULL)freepoint(a->pvalue);
 	
 	free(a);
 }
@@ -442,6 +478,14 @@ bool assignvariable(VALU * val, char * name)
 		}else
 			printf("Warning! Can't assign type '%s' to constan 'global_p' which expects type 'num'.\n",TYPE[val->type]);
 		return true;
+	}
+	
+	if(strcamp(name,"global_curve")){
+		if(val->type == 3){
+			curveassign(global_curve,val->c);
+		}else
+			printf("Warning! Can't assign type '%s' to 'global_curve' which expects type 'curve'.\n");
+			return true; 
 	}
 	
 	VAR * current = findvariable(name);
@@ -562,7 +606,7 @@ bool addv(VALU * a, VALU * b, VALU * result)
 		result->type = 0; result->value = a->value + b->value;
 		return true;
 	}
-	if(a->type == 1 || b->type == 1){
+	if(a->type == 1 && b->type == 1){
 		result->type = 1; fadd(a->fvalue,b->fvalue,global_p,result->fvalue);
 		return true;
 	}
@@ -584,7 +628,7 @@ bool minuv(VALU * a, VALU * b, VALU * result)
 		result->type = 0; result->value = a->value - b->value;
 		return true;
 	}
-	if(a->type == 1 || b->type == 1){
+	if(a->type == 1 && b->type == 1){
 		result->type = 1; fminus(a->fvalue,b->fvalue,global_p,result->fvalue);
 		return true;
 	}
@@ -841,6 +885,8 @@ VALU * atom(int *start)
 				result = newvalue(0,t,NULL,NULL,NULL);
 			}else if(strcamp(name, "global_p")){
 				result = newvalue(0,global_p,NULL,NULL,NULL);
+			}else if(strcamp(name,"global_curve")){
+				result = newvalue(3,0,NULL,NULL,global_curve);
 			}else{
 				VAR * v = findvariable(name);
 				
@@ -951,17 +997,17 @@ VALU * duplicate(int *start, char * name)
 	VALU * result;
 	result = expression(start);
 	if(result == NULL){
-		printf("Too few parameter for function '%s()'.\n",name);
+		printf("Too few parameter for function '%s()', expected three parameters.\n",name);
 		return NULL;
 	}
 	VALU * temp = expression(start);
 	if(temp == NULL){
-		printf("Too few parameter for function '%s()'.\n",name);
+		printf("Too few parameter for function '%s()', expected two more parameter.\n",name);
 		return NULL;
 	}
 	VALU * temp1 = expression(start);
-	if(temp == NULL){
-		printf("Too few parameter for function '%s()'.\n",name);
+	if(temp1 == NULL){
+		printf("Too few parameter for function '%s()', expected one more parameter.\n",name);
 		return NULL;
 	}
 	if(result->type == 2 && temp->type == 2 && temp1->type == 0){
@@ -985,6 +1031,34 @@ VALU * duplicate(int *start, char * name)
 	}
 	printf("Parameter type error for function '%s()'.\n",name);
 	return NULL;
+}
+
+bool gencurve(VALU * a,VALU * b,VALU * result)
+{
+	if(a->type == 0 && b->type == 0){
+		result->c->A->x = 0;result->c->A->y = a->value;
+		result->c->B->x = 0;result->c->B->y = b->value;
+		result->type = 3;
+		return true;
+	}
+	if(a->type == 1 && b->type == 1){
+		assign(result->c->A,a->fvalue);assign(result->c->B,b->fvalue);
+		result->type = 3;
+		return true;
+	}
+	if(a->type == 0 && b->type == 1){
+		result->c->A->x = 0;result->c->A->y = a->value;
+		assign(result->c->B,b->fvalue);
+		result->type = 3;
+		return true;
+	}
+	if(a->type == 1 && b->type == 0){
+		assign(result->c->A,a->fvalue);
+		result->c->B->x = 0; result->c->B->y = b->value;
+		result->type = 3;
+		return true;
+	}
+	return false;
 }
 
 VALU * tuple(int *start, char * key)
@@ -1087,9 +1161,39 @@ VALU * tuple(int *start, char * key)
 		
 		return result;
 	}
-	
+	if(strcamp(key,"curve") || strcamp(key,"cu")){
+		result = expression(start);
+		if(result == NULL){
+			printf("You need two parameter to generate a curve.\n");
+			return NULL;
+		}
+		VALU * temp = expression(start);
+		if(temp == NULL){
+			return NULL;
+		}
+		if(temp->type <= 1 && result->type <= 1){
+			gencurve(result,temp,result);
+			freevalu(temp);
+			return result;
+		}
+		printf("Parameter type error for function 'curve'");
+	} 
 	if(strcamp(key,"pair")){
 		return duplicate(start,key);
+	}
+	if(strcamp(key,"gcd")){
+		result = expression(start);
+		if(result == NULL)return NULL;
+		
+		VALU * temp = expression(start);
+		if(start == NULL)return NULL;
+		lint a,b;
+		if(result->type == 0, temp->type == 0){
+			result->value = gcdEx(result->value,temp->value,&a,&b);
+			return result;
+		} 
+		printf("Type error for 'gcd()'.\n");
+		return NULL;
 	}
 	
 	return NULL;
@@ -1119,22 +1223,42 @@ void lex(char * input);
 void demo()
 {
 	system("cls");
-	char dem[1000] = "We first buid two empty varibales named 'n' and 'm'\n;var n m;\
-	 \nthen assign vlaue to them\n;n = 120;\n;m = 200;\n\
+	char dem[2000] = "We first build two empty variables named 'n' and 'm'\n;var n m;\
+	 \nthen assign vlaues to them\n;n = 120;\n;m = 200;\n\
+	 \nCompute m+n\n ;m+n;\n\
 	 \nGenerate a random prime with lenth m and put it to vairable a\n;a=Randomprime(m);\n \
 	 \nSet global prime\n;global_p = a;\n\
 	 \nEvaluabte an math expression\n;a^2 + m*(n - 12*n)/a +(12*3)*(12+45+34);\n\
-	 \nGenerate an random point and put it to varibale p\n;p = Randompoint();\n\
+	 \nGenerate an random point and put it to variable p\n;p = Randompoint();\n\
 	 \nAnother point q\n;q = Randompoint();\n\
+	 \nCompute point addtion p + q\n;p + q;\n\
 	 \nCompute their order\n;ord(p);\n;ord(q);\n\
 	 \nUse function phi\n;p1 = phi(p);\n\
 	 \nIt's order is\n;r = ord(p1);\n\
-	 \nWe can see it they are the same.\n\
+	 \nWe can see that they are the same.\n\
 	 \nCompute weil paring\n;f = pair(p,p1,r);\n\
 	 \nVarify binearity\n;f1 = pair(3*p,p1,r);\n\
 	 \nand f^3 = f1\n;f^3 - f1;\n\
 	 \n;f2 = pair(3*p,5*p1,r);\n\
-	 \n;f^15 - f2;\n\n\nThanks for watching!";
+	 \n;f^15 - f2;\n\
+	 \nWe now demostrate how pairing can be used in cryptograph\n\
+	 \nSuppose Alice, Bob Chalrse wants to share a secret key 'K', they firstly choose three random number sepreately\n\
+	 \n;A = Randomprime(100);\n\
+	 \n;B = Randomprime(100);\n\
+	 \n;C = Randomprime(100);\n\
+	 \nThey post the following public keys\n\
+	 \n;Ap = A*p;\n\
+	 \n;Bp = B*p;\n\
+	 \n;Cp = C*p;\n\
+	 \nOnece recieved the keys, they calculate the follow value\n\
+	 \n;Ka = pair(Bp,phi(Cp),r);\n\
+	 \n;Kb = pair(Ap,phi(Cp),r);\n\
+	 \n;Kc = pair(Ap,phi(Bp),r);\
+	 \nNow, we can check they have shared the key pair(p,phi(p),r)^ABC\n\
+	 \n;Ka^A;\n\
+	 \n;Kb^B;\n\
+	 \n;Kc^C;\n\
+	 \nThanks for watching!";
 	int len = strlen(dem);
 	int i = 0, j = 0;
 	while(i < len){
