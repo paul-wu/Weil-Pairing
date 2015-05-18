@@ -57,7 +57,7 @@ lint global_p = 23;
 
 CURVE * global_curve;
 
-char * TYPE[3] = {"num","felement","point"};
+char * TYPE[5] = {"num","felement","point","curve","constant"};
 char * KEY[10] = {"randomprime","modsqrt","modpower","select","mod","curve","remove","var"};
 
 typedef struct variable{
@@ -433,6 +433,17 @@ void freecurve(CURVE * c)
 
 bool assignvariable(VALU * val, char * name)
 {
+	if(strcamp(name,"global_p")){
+		if(val->type == 0){
+			if(millerrabin(val->value,10)){
+				global_p = val->value; 
+			}else
+				printf("Warning! Can't assign value %lld to 'global_p', since it's not a prime.\n",val->value);
+		}else
+			printf("Warning! Can't assign type '%s' to constan 'global_p' which expects type 'num'.\n",TYPE[val->type]);
+		return true;
+	}
+	
 	VAR * current = findvariable(name);
 	if(current == NULL){
 		return putvariable(val->type,name,val->value,val->fvalue,val->pvalue,val->c);
@@ -451,6 +462,16 @@ bool checkchar(TOKEN * t, char c)
 {
 	if(t->type == 0 && t->c == c)return true;
 	return false;	
+}
+
+void showcons(char * name)
+{
+	if(name == NULL)return;
+	if(strcamp(name,"global_p")){
+		printf("Name: %s\n",name);
+		printf("Type: constant\n");
+		printf("Value: %lld\n",global_p);
+	}
 }
 
 void statement(int header)
@@ -501,6 +522,10 @@ void statement(int header)
 	if(tokenlist[header]->type == 1 && strcamp(tokenlist[header]->vaule,"check")){
 		while(++header < tokenlen){
 			if(tokenlist[header]->type == 1){
+				if(strcamp(tokenlist[header]->vaule,"global_p")){
+					showcons(tokenlist[header]->vaule);
+					return;
+				}
 				VAR * get = findvariable(tokenlist[header]->vaule);
 				if(get == NULL){
 					printf("Can't find variable '%s'.\n",tokenlist[header]->vaule);
@@ -541,7 +566,7 @@ bool addv(VALU * a, VALU * b, VALU * result)
 		result->type = 1; fadd(a->fvalue,b->fvalue,global_p,result->fvalue);
 		return true;
 	}
-	if(a->type == 2 && b->type == 2){
+	if(a->type == 2 && b->type == 2 && testpoint(a->pvalue,global_curve,global_p) && testpoint(b->pvalue,global_curve,global_p)){
 		result->type = 2; add(a->pvalue,b->pvalue,global_curve,global_p,result->pvalue);
 		return true;
 	}
@@ -671,7 +696,7 @@ VALU * expression(int * start)
 	
 	if(result == NULL)return NULL;
 	
-	if(*start >= tokenlen || checkchar(tokenlist[*start],';') || checkchar(tokenlist[*start],')') || checkchar(tokenlist[*start],',')){ // end of expression
+	if(*start >= tokenlen || checkchar(tokenlist[*start],';') || checkchar(tokenlist[*start],')') || checkchar(tokenlist[*start],',') || checkchar(tokenlist[*start],']')){ // end of expression
 		*start += 1;
 		return result;
 	}
@@ -689,7 +714,8 @@ VALU * expression(int * start)
 		int ty = result->type;
 		
 		if(!addv(result,temp,result)){
-			printf("Type '%s' and Type '%s' can not be added.\n",TYPE[temp->type],TYPE[ty]);
+			if(ty == temp->type && ty == 2)printf("One of/both the points are not in the current curve.\n");
+			else printf("Type '%s' and Type '%s' can not be added.\n",TYPE[temp->type],TYPE[ty]);
 			freevalu(result);
 			result = NULL;
 		}
@@ -723,6 +749,31 @@ VALU * expression(int * start)
 	return NULL;
 }
 
+bool constructpointvalue(VALU * a, VALU * b,VALU * result)
+{
+	if(a->type == 0 && b->type == 0){
+		result->type = 2; result->pvalue->x->x = 0; result->pvalue->x->y = a->value;
+		result->pvalue->y->x = 0; result->pvalue->y->y = b->value;
+		return true;
+	}
+	if(a->type == 1 && b->type == 1){
+		result->type = 2; assign(result->pvalue->x,a->fvalue);
+		assign(result->pvalue->y,b->fvalue);
+		return true;
+	}
+	if(a->type == 0 && b->type == 1){
+		result->type = 2; assign(result->pvalue->y,b->fvalue);
+		result->pvalue->x->x = 0; result->pvalue->x->y = a->value;
+		return true;
+	}
+	if(a->type == 1 && b->type == 0){
+		result->type = 2; assign(result->pvalue->x,a->fvalue);
+		result->pvalue->y->x = 0; result->pvalue->y->y = b->value;
+		return true;
+	}
+	return false;
+}
+
 VALU * atom(int *start)
 {
 	if(*start >= tokenlen || checkchar(tokenlist[*start],';'))return NULL;
@@ -752,6 +803,27 @@ VALU * atom(int *start)
 				*start += 1;
 				result = expression(start);
 			}
+		}else if(tokenlist[*start]->c == '['){
+			*start += 1;
+			result = expression(start);
+			if(result == NULL)return NULL;
+			if(!checkchar(tokenlist[(*start) - 1],',')){
+				printf("Syntax Error! Expect two parameter for points.\n");
+				return NULL;
+			}
+			
+			int ty = result->type;
+			
+			VALU * temp = expression(start);
+			if(temp == NULL)return NULL;
+			if(!constructpointvalue(result,temp,result)){
+				printf("Can't paramize type '%s' and '%s' to be a point.\n",TYPE[ty],TYPE[temp->type]);
+				if(temp)freevalu(temp);
+				if(result)freevalu(result);
+				return NULL;
+			}
+			if(!testpoint(result->pvalue,global_curve,global_p))printf("Warning! The point is not on the current cure.\n");
+			freevalu(temp);
 		}else{
 			printf("Syntax Error! Unexpected charactor '%c'.\n",tokenlist[*start]->c);
 			return NULL;
@@ -767,9 +839,11 @@ VALU * atom(int *start)
 			if(checkint(name)){
 				lint t = parseint(name);
 				result = newvalue(0,t,NULL,NULL,NULL);
+			}else if(strcamp(name, "global_p")){
+				result = newvalue(0,global_p,NULL,NULL,NULL);
 			}else{
 				VAR * v = findvariable(name);
-
+				
 				if(!v){
 					printf("'%s' has not been defined.\n",name);
 					return NULL;
@@ -814,7 +888,7 @@ VALU * term(int * start)
 	
 	int ty = result->type;
 	
-	if(*start >= tokenlen || checkchar(tokenlist[*start],';') || checkchar(tokenlist[*start],')') || checkchar(tokenlist[*start],',') || checkchar(tokenlist[*start],'+') || checkchar(tokenlist[*start],'-')){ // end of expression
+	if(*start >= tokenlen || checkchar(tokenlist[*start],';') || checkchar(tokenlist[*start],')') || checkchar(tokenlist[*start],',') || checkchar(tokenlist[*start],'+') || checkchar(tokenlist[*start],'-') || checkchar(tokenlist[*start],']')){ // end of expression
 		return result;
 	}
 		
@@ -856,6 +930,60 @@ VALU * term(int * start)
 		return result; 
 	}	
 	printf("Syntax Error! Invalid term.\n");
+	return NULL;
+}
+
+bool sqrtv(VALU * a, VALU * result)
+{
+	if(a->type == 0){
+		result->value = (lint)sqrt((double)a->value);
+		return true;
+	}
+	if(a->type == 1 && a->fvalue->x == 0){
+		result->fvalue->x = 0; result->fvalue->y = modsquareroot(a->fvalue->y,global_p);
+		return true;
+	}
+	return false;
+}
+
+VALU * duplicate(int *start, char * name)
+{
+	VALU * result;
+	result = expression(start);
+	if(result == NULL){
+		printf("Too few parameter for function '%s()'.\n",name);
+		return NULL;
+	}
+	VALU * temp = expression(start);
+	if(temp == NULL){
+		printf("Too few parameter for function '%s()'.\n",name);
+		return NULL;
+	}
+	VALU * temp1 = expression(start);
+	if(temp == NULL){
+		printf("Too few parameter for function '%s()'.\n",name);
+		return NULL;
+	}
+	if(result->type == 2 && temp->type == 2 && temp1->type == 0){
+		if(!testpoint(result->pvalue,global_curve,global_p)|| !testpoint(temp->pvalue,global_curve,global_p)){
+			printf("One / both points are not on the curve.\n");
+			return NULL;
+		}
+		FPOINT * f = newfpoint(0,0);
+		if(strcamp(name,"miller") && !miller(result->pvalue,temp->pvalue,global_curve,global_p,temp1->value,f)){
+			printf("Error can't compute 'miller()' for these two points.\n");
+			return NULL;
+		}
+		if(strcamp(name,"pair") && !weilpairing(result->pvalue,temp->pvalue,global_curve,global_p,temp1->value,f)){
+			printf("Error can't compute 'pair()' for these two points.\n");
+			return NULL;
+		}
+		freevalu(temp1);freevalu(temp);freevalu(result);
+		result = newvalue(1,0,f,NULL,NULL);
+		if(f)free(f);
+		return result;
+	}
+	printf("Parameter type error for function '%s()'.\n",name);
 	return NULL;
 }
 
@@ -904,7 +1032,65 @@ VALU * tuple(int *start, char * key)
 		printf("Wrong parameter type for PrimeQ().\n");
 		return NULL;
 	}
+	if(strcamp(key,"sqrt")){
+		result = expression(start);
+		
+		if(result == NULL)return NULL;
+		
+		if(result->type == 0 || result->type == 1){
+			if(!sqrtv(result,result)){
+				printf("Invalid type or value for function 'sqrt'.\n");
+				return NULL;
+			}
+		}else{
+			printf("Wrong parameter type for sqrt().\n");
+			return NULL;
+		}
+		return result;
+	}
+	if(strcamp(key,"Randompoint")){
+		*start += 1;
+		result = newvalue(2,0,NULL,randompoint(global_curve,global_p),NULL);
+		return result;
+	}
+	if(strcamp(key,"ord")){
+		result = expression(start);
+		if(result == NULL)return NULL;
+		if(result->type != 2){
+			printf("Invalid paramenter type for 'ord()'.\n");
+			return NULL;
+		}
+		VALU * temp = result;
+		if(!testpoint(temp->pvalue,global_curve,global_p)){
+			printf("Can't find the order for a point not in the curve.\n");
+			return NULL;
+		}
+		result = newvalue(0,findorder(temp->pvalue,global_curve,global_p),NULL,NULL,NULL);
+		free(temp);
+		return result;
+	}
+	if(strcamp(key,"mill") || strcamp(key,"miller")){
+		return duplicate(start,key);
+	}
 	
+	if(strcamp(key,"phi")){
+		result = expression(start);
+		if(result == NULL){
+			printf("No parameter for function 'phi()'.\n");
+			return NULL;
+		}
+		if(result->type != 2){
+			printf("Parameter type error for function 'phi'.\n");
+			return NULL;
+		}
+		phi(result->pvalue,global_p,result->pvalue);
+		
+		return result;
+	}
+	
+	if(strcamp(key,"pair")){
+		return duplicate(start,key);
+	}
 	
 	return NULL;
 }
@@ -932,7 +1118,8 @@ void init_system()
 	printf("4. type 'help' to get the detailed help.\n");
 	printf("\n");
 	
-	
+	global_curve = newcurve(0,1);
+	global_p = 23;
 	
 }
 
@@ -990,17 +1177,7 @@ int main()
 	char * worktap = (char *)malloc(MAX_STR);
 	int pos;
 	init();
-	printf("------------------------------------------------------------\n");
-	printf("    Welcome to use Weil pairing demostration interpreter\n");
-	printf("------------------------------------------------------------\n");
-	printf("Version 2.7\n");
-	printf("Copyright (c) 2015. Wu Changlong<changlong1993@gmail.com>\n");
-	printf("\n");
-	printf("Hints:\n");
-	printf("1. type 'quit' to exit.\n");
-	printf("2. type 'clear' to clear the screen.\n");
-	printf("3. type 'reset' to set all the environment.\n");
-	printf("4. type 'help' to get the detailed help.\n\n");
+	init_system();
 	while(true){
 		printf("> ");
 		
