@@ -163,6 +163,7 @@ bool checknum(char c)
 
 bool checkint(char * num)
 {
+	if(num == NULL)return false;
 	int len = strlen(num);
 	while(--len>=0){
 		if(!checknum(num[len]))return false;
@@ -616,6 +617,30 @@ bool diviv(VALU * a,VALU * b, VALU * result)
 	return false;
 }
 
+lint POW(lint a,lint b)
+{
+	lint t = a;
+	while(--b>0){
+		t *= a;
+	}
+	return t;
+}
+
+bool powv(VALU * a, VALU * b,VALU *result)
+{
+	if(b->type != 0)return false;
+	
+	if(a->type == 0){
+		result->type = 0; result->value = POW(a->value,b->value);
+		return true;
+	}
+	if(a->type == 1){
+		result->type = 1;if(result->fvalue && b->fvalue)fpower(a->fvalue,b->value,global_p,result->fvalue);
+		return true;
+	}
+	return false;
+}
+
 VALU * expression(int * start)
 {
 	if(*start >= tokenlen || checkchar(tokenlist[*start],';')){
@@ -698,21 +723,27 @@ VALU * expression(int * start)
 	return NULL;
 }
 
-VALU * term(int * start)
+VALU * atom(int *start)
 {
 	if(*start >= tokenlen || checkchar(tokenlist[*start],';'))return NULL;
-
-	VALU * result = NULL;
+	
+	VALU * result;
 	
 	if(tokenlist[*start]->type == 0){
 		if(tokenlist[*start]->c == '('){
 			if(*start + 4 < tokenlen && checkchar(tokenlist[*start + 2],',') && checkchar(tokenlist[*start+4],')')){
 				char * name1 = tokenlist[*start+1]->vaule, *name2 = tokenlist[*start + 3]->vaule;
 				
+				if(name1 == NULL || name2 == NULL){
+					printf("Syntax Error! Invalid charactor.\n");
+					return NULL;
+				}
+				
 				if(checkint(name1) && checkint(name2)){
 					FPOINT * temp = newfpoint(ABS(parseint(name1),global_p),ABS(parseint(name2),global_p));
 					result = newvalue(1,0,temp,NULL,NULL);
 					*start += 5;
+					free(temp);
 				}else{
 					printf("Syntax Error! Can't parse '(%s,%s)' to be an field element.\n",name1,name2);
 					return NULL;
@@ -743,20 +774,50 @@ VALU * term(int * start)
 					printf("'%s' has not been defined.\n",name);
 					return NULL;
 				}
-				
 				result = newvalue(v->type,v->value,v->fvalue,v->pvalue,v->c);
 			}
 		}
-		
 	}
+	return result;
+} 
+
+VALU * term(int * start)
+{
+	if(*start >= tokenlen || checkchar(tokenlist[*start],';'))return NULL;
+
+	VALU * result = NULL;
 	
+	result = atom(start);
+	
+	if(*start < tokenlen && checkchar(tokenlist[*start],'^')){
+		*start += 1;
+		VALU * temp = atom(start);
+		
+		int tp = result->type; 
+		
+		if(temp == NULL || result == NULL){
+			if(result)freevalu(result);
+			if(temp)freevalu(temp);
+			return NULL;
+		}
+		
+		if(!powv(result,temp,result)){
+			printf("Type '%s' can not be the power of type '%s'.\n", TYPE[temp->type],TYPE[tp]);
+			if(result)freevalu(result);
+			if(temp)freevalu(temp);
+			return NULL;
+		}
+		if(temp)freevalu(temp);
+	}
+
 	if(result == NULL)return NULL;
 	
 	int ty = result->type;
 	
 	if(*start >= tokenlen || checkchar(tokenlist[*start],';') || checkchar(tokenlist[*start],')') || checkchar(tokenlist[*start],',') || checkchar(tokenlist[*start],'+') || checkchar(tokenlist[*start],'-')){ // end of expression
 		return result;
-	}	
+	}
+		
 	if(checkchar(tokenlist[*start],'*')){
 		*start += 1;
 		
@@ -765,7 +826,6 @@ VALU * term(int * start)
 		if(temp == NULL || result == NULL){
 			if(result)freevalu(result);
 			if(temp)freevalu(temp);
-			result = NULL;
 			return NULL;
 		} 
 				
@@ -785,7 +845,6 @@ VALU * term(int * start)
 		if(temp == NULL || result == NULL){
 			if(result)freevalu(result);
 			if(temp)freevalu(temp);
-			result = NULL;
 			return NULL;
 		}
 		if(!diviv(result,temp,result)){
@@ -795,14 +854,57 @@ VALU * term(int * start)
 		}
 		freevalu(temp);
 		return result; 
-	}
+	}	
 	printf("Syntax Error! Invalid term.\n");
 	return NULL;
 }
 
 VALU * tuple(int *start, char * key)
 {
-	//TODO
+	VALU * result;
+	
+	if(*start >= tokenlen || checkchar(tokenlist[*start],';'))return NULL;
+	
+	if(strcamp(key,"Randomprime")){
+		
+		result = expression(start);
+		
+		if(result == NULL)return NULL;
+		
+		if(result->type == 0){
+			result->value = randonsafeprime(result->value);
+		}else{
+			printf("Wrong parameter type for Randomprime().\n");
+			return NULL;
+		}
+		return result;
+	}
+	if(strcamp(key,"PrimeQ")){
+		result = expression(start);
+		VALU * temp;
+		int t = *start - 1;
+		if(checkchar(tokenlist[t],',')){
+			temp = expression(start);
+			if(temp == NULL || result == NULL)return NULL;
+			
+			if(result->type == 0 && temp->type == 0){
+				result->value = (int)millerrabin(result->value,temp->value);
+				return result;
+			}
+			printf("Wrong parameter type for PrimeQ().\n");
+			return NULL;
+		}
+		
+		if(result == NULL)return NULL;
+		
+		if(result->type == 0){
+			result->value = (int)millerrabin(result->value,10);
+			return result;
+		}
+		printf("Wrong parameter type for PrimeQ().\n");
+		return NULL;
+	}
+	
 	
 	return NULL;
 }
@@ -887,7 +989,7 @@ int main()
 {
 	char * worktap = (char *)malloc(MAX_STR);
 	int pos;
-	
+	init();
 	printf("------------------------------------------------------------\n");
 	printf("    Welcome to use Weil pairing demostration interpreter\n");
 	printf("------------------------------------------------------------\n");
