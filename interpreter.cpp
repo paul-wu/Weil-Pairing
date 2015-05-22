@@ -744,7 +744,7 @@ VALU * expression(int * start)
 		*start += 1;
 		return result;
 	}
-	if(checkchar(tokenlist[*start],'+')){ // if add
+L3:	if(checkchar(tokenlist[*start],'+')){ // if add
 		*start += 1;
 		VALU * temp = expression(start);
 		
@@ -766,9 +766,9 @@ VALU * expression(int * start)
 		freevalu(temp);
 		return result;
 	}
-	if(checkchar(tokenlist[*start],'-')){ // if minus
+L4:	if(checkchar(tokenlist[*start],'-')){ // if minus
 		*start += 1;
-		VALU * temp = expression(start);
+		VALU * temp = term(start);
 		
 		if(temp == NULL || result == NULL){
 			if(result)freevalu(result);
@@ -784,8 +784,13 @@ VALU * expression(int * start)
 			freevalu(result);
 			result = NULL;
 		}
-		freevalu(temp);
-		return result;
+		if(*start >= tokenlen || checkchar(tokenlist[*start],';') || checkchar(tokenlist[*start],')') || checkchar(tokenlist[*start],',') || checkchar(tokenlist[*start],']')){ // end of expression
+			*start += 1;
+			freevalu(temp);
+			return result;
+		}
+		if(checkchar(tokenlist[*start],'+'))goto L3;
+		if(checkchar(tokenlist[*start],'-'))goto L4;
 	}
 	
 	printf("Syntax Error! Invalid expression.\n");
@@ -937,7 +942,7 @@ VALU * term(int * start)
 	if(*start >= tokenlen || checkchar(tokenlist[*start],';') || checkchar(tokenlist[*start],')') || checkchar(tokenlist[*start],',') || checkchar(tokenlist[*start],'+') || checkchar(tokenlist[*start],'-') || checkchar(tokenlist[*start],']')){ // end of expression
 		return result;
 	}
-		
+L1:		
 	if(checkchar(tokenlist[*start],'*')){
 		*start += 1;
 		
@@ -957,10 +962,11 @@ VALU * term(int * start)
 		freevalu(temp);
 		return result;
 	}
+L2:
 	if(checkchar(tokenlist[*start],'/')){
 		*start += 1;
 		
-		VALU * temp = term(start);
+		VALU * temp = atom(start);
 		
 		if(temp == NULL || result == NULL){
 			if(result)freevalu(result);
@@ -970,10 +976,14 @@ VALU * term(int * start)
 		if(!diviv(result,temp,result)){
 			printf("Type '%s' can not divide Type '%s'.\n",TYPE[temp->type],TYPE[ty]);
 			freevalu(result);
-			result = NULL;
+			return NULL;
 		}
-		freevalu(temp);
-		return result; 
+		if(*start >= tokenlen || checkchar(tokenlist[*start],';') || checkchar(tokenlist[*start],')') || checkchar(tokenlist[*start],',') || checkchar(tokenlist[*start],'+') || checkchar(tokenlist[*start],'-') || checkchar(tokenlist[*start],']')){ // end of expression
+			freevalu(temp);
+			return result; 
+		}
+		if(checkchar(tokenlist[*start],'*'))goto L1;
+		if(checkchar(tokenlist[*start],'/'))goto L2;
 	}	
 	printf("Syntax Error! Invalid term.\n");
 	return NULL;
@@ -1225,8 +1235,8 @@ void demo()
 	system("cls");
 	char dem[2000] = "We first build two empty variables named 'n' and 'm'\n;var n m;\
 	 \nthen assign vlaues to them\n;n = 120;\n;m = 200;\n\
-	 \nCompute m+n\n ;m+n;\n\
-	 \nGenerate a random prime with lenth m and put it to vairable a\n;a=Randomprime(m);\n \
+	 \nCompute m+n\n;m + n;\n\
+	 \nGenerate a random prime with lenth m and put it to vairable a\n;a = Randomprime(m);\n\
 	 \nSet global prime\n;global_p = a;\n\
 	 \nEvaluabte an math expression\n;a^2 + m*(n - 12*n)/a +(12*3)*(12+45+34);\n\
 	 \nGenerate an random point and put it to variable p\n;p = Randompoint();\n\
@@ -1237,7 +1247,7 @@ void demo()
 	 \nIt's order is\n;r = ord(p1);\n\
 	 \nWe can see that they are the same.\n\
 	 \nCompute weil paring\n;f = pair(p,p1,r);\n\
-	 \nVarify binearity\n;f1 = pair(3*p,p1,r);\n\
+	 \nVarify bilinearity\n;f1 = pair(3*p,p1,r);\n\
 	 \nand f^3 = f1\n;f^3 - f1;\n\
 	 \n;f2 = pair(3*p,5*p1,r);\n\
 	 \n;f^15 - f2;\n\
@@ -1280,7 +1290,7 @@ void demo()
 			free(input);
 			i = j+1;continue;
 		}
-		Sleep(10000);
+		Sleep(20000);
 		i++;
 	}
 	system("pause");
@@ -1325,7 +1335,7 @@ void help()
 	
 	
 	printf("\n\nOperation:\n");
-	printf("1. Our langudge compatible with the common mathematical expression completely.\n");
+	printf("1. Our language compatible with the common mathematical expression completely.\n");
 	printf("2. To buid new variables, you can use 'var name1 name2 name3 ...', or just 'a = value'.\n");
 	printf("3. Use 'del name' to delete the varaible you don't need.\n");
 	printf("4. We have an automatic type inference system, so all the types are generated automaticaly.\n");
