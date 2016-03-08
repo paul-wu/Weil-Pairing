@@ -516,6 +516,11 @@ void showcons(char * name)
 		printf("Type: constant\n");
 		printf("Value: %lld\n",global_p);
 	}
+	if(strcamp(name, "global_curve")){
+		printf("Name: %s\n",name);
+		printf("Type: constant\n");
+		printcurve(global_curve);
+	}
 }
 
 void statement(int header)
@@ -566,7 +571,7 @@ void statement(int header)
 	if(tokenlist[header]->type == 1 && strcamp(tokenlist[header]->vaule,"check")){
 		while(++header < tokenlen){
 			if(tokenlist[header]->type == 1){
-				if(strcamp(tokenlist[header]->vaule,"global_p")){
+				if(strcamp(tokenlist[header]->vaule,"global_p") || strcamp(tokenlist[header]->vaule,"global_curve")){
 					showcons(tokenlist[header]->vaule);
 					return;
 				}
@@ -913,6 +918,8 @@ VALU * term(int * start)
 	VALU * result = NULL;
 	
 	result = atom(start);
+	
+	if(result == NULL)return result;
 	
 	if(*start < tokenlen && checkchar(tokenlist[*start],'^')){
 		*start += 1;
